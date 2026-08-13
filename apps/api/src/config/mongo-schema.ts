@@ -49,12 +49,40 @@ export const ordersCollectionValidator: Document = {
   },
 };
 
+export const paymentsCollectionValidator: Document = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['userId', 'orderId', 'amountCents', 'paidAt', 'note', 'idempotencyKey', 'createdAt'],
+    properties: {
+      userId: { bsonType: 'string', minLength: 1 },
+      orderId: { bsonType: 'objectId' },
+      amountCents: { bsonType: ['int', 'long'], minimum: 1 },
+      paidAt: { bsonType: 'date' },
+      note: { bsonType: ['string', 'null'], maxLength: 1_000 },
+      idempotencyKey: { bsonType: 'string', minLength: 1, maxLength: 200 },
+      createdAt: { bsonType: 'date' },
+    },
+  },
+};
+
 export const ensureOrdersCollection = async () => {
   const collectionExists = await database().listCollections({ name: 'orders' }).hasNext();
 
   if (!collectionExists) {
     await database().createCollection('orders', {
       validator: ordersCollectionValidator,
+      validationLevel: 'strict',
+      validationAction: 'error',
+    });
+  }
+};
+
+export const ensurePaymentsCollection = async () => {
+  const collectionExists = await database().listCollections({ name: 'payments' }).hasNext();
+
+  if (!collectionExists) {
+    await database().createCollection('payments', {
+      validator: paymentsCollectionValidator,
       validationLevel: 'strict',
       validationAction: 'error',
     });

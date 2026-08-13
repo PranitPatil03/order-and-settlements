@@ -102,6 +102,64 @@ Indexes:
 
 The `userId` condition is included in every order repository query, which prevents one authenticated user from reading or modifying another user's data.
 
+## Payments
+
+Payment endpoints:
+
+```text
+GET  /api/orders/:orderId/payments
+POST /api/orders/:orderId/payments
+```
+
+Recording a payment requires an `Idempotency-Key` header:
+
+```http
+Idempotency-Key: payment-request-unique-id
+```
+
+The request body is:
+
+```json
+{
+  "amountCents": 40000,
+  "paidAt": "2026-08-13T12:00:00.000Z",
+  "note": "Deposit"
+}
+```
+
+The payment write is transactional:
+
+```text
+validate request
+  -> check idempotency key
+  -> atomically increment order.grossPaidCents if it stays <= totalCents
+  -> insert immutable payment document
+  -> commit transaction
+```
+
+If the balance condition fails, the transaction is aborted and the API returns `409 PAYMENT_EXCEEDS_BALANCE` with `maximumAllowedCents`. Repeating the same request with the same idempotency key returns the original payment instead of creating a duplicate. Reusing that key for another order is rejected.
+
+Payment documents are stored separately:
+
+```text
+payments
+├── _id: ObjectId
+├── userId: string
+├── orderId: ObjectId
+├── amountCents: integer
+├── paidAt: Date
+├── note: string | null
+├── idempotencyKey: string
+└── createdAt: Date
+```
+
+The `payments` collection has a strict MongoDB validator and these indexes:
+
+```text
+{ userId: 1, orderId: 1, paidAt: -1 }
+{ userId: 1, idempotencyKey: 1 } unique
+```
+
 ## Order status
 
 Status is derived rather than stored as the source of truth:
