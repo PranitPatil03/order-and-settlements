@@ -72,6 +72,9 @@ importers:
       '@orders-and-settlements/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      better-auth:
+        specifier: ^1.6.27
+        version: 1.6.27(mongodb@6.21.0)(next@15.5.23(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

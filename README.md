@@ -160,6 +160,26 @@ The `payments` collection has a strict MongoDB validator and these indexes:
 { userId: 1, idempotencyKey: 1 } unique
 ```
 
+## Frontend workflow
+
+The web app uses the Better Auth React client with the API origin as its `baseURL`. Authentication requests and normal API requests both include credentials so the Better Auth HTTP-only session cookie is sent to Express.
+
+Frontend routes:
+
+```text
+/login                  email/password sign in
+/signup                 email/password account creation
+/orders                 authenticated dashboard and status filter
+/orders/new             create an order with line items
+/orders/:orderId        order detail, payment form, and payment history
+```
+
+The dashboard loads the authenticated session first. If no session exists, it redirects to `/login`. Once authenticated, it loads orders from `GET /api/orders`, computes dashboard summary values from the server response, and renders status badges using the same four domain statuses as the API.
+
+Creating an order converts the form's decimal display price to integer cents before calling the API. The API remains the source of truth and recalculates all totals. Recording a payment creates a fresh idempotency key in the browser and sends it with `POST /api/orders/:orderId/payments`.
+
+The UI uses shadcn-style primitives and a restrained visual system: neutral surfaces, navy text, one primary blue, and semantic status colors only where status meaning is needed. No frontend Testing Library is included for this assignment; API/domain correctness is verified at the backend boundary and the frontend is verified through typecheck, production build, and route smoke tests.
+
 ## Order status
 
 Status is derived rather than stored as the source of truth:
