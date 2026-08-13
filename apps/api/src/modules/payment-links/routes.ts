@@ -10,16 +10,16 @@ import { recordPublicPaymentSchema } from './schema.js';
 
 const publicPaymentLinksRouter = Router();
 
-const getToken = (value: unknown) => {
+export const getToken = (value: unknown) => {
   if (typeof value !== 'string' || value.length < 40 || value.length > 100) {
     throw new AppError('PAYMENT_LINK_INVALID', 'This payment link is invalid or expired.', 404);
   }
   return value;
 };
 
-const getAccessCode = (request: Request) => {
+export const getAccessCode = (request: Request) => {
   const code = request.get('X-Payment-Code')?.trim();
-  if (!code || !/^[a-z0-9]{10}$/i.test(code)) {
+  if (!code || !/^[a-z0-9_-]{10}$/i.test(code)) {
     throw new AppError('PAYMENT_CODE_REQUIRED', 'Enter the payment access code.', 401);
   }
   return code;

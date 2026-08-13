@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createOrder } from '@/lib/api-client';
-
 type FormLineItem = { description: string; quantity: string; unitPrice: string };
 
 export function OrderForm() {

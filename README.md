@@ -19,6 +19,30 @@ With pnpm 11, native dependency build scripts are explicitly allowlisted in `pnp
 - Node.js 22 LTS or newer within the supported range.
 - pnpm 11.
 
+## Testing
+
+Run the full API test suite with:
+
+```bash
+pnpm --filter @orders-and-settlements/api test
+```
+
+Run type checking for the full workspace with:
+
+```bash
+pnpm typecheck
+```
+
+The current backend tests cover:
+
+- Order total and status derivation.
+- Remaining-balance calculations after refunds.
+- Payment-link token and access-code generation.
+- Public payment-link access-code validation.
+- Order edit/delete locking after financial activity.
+
+There is no browser E2E suite in the repository; the frontend is verified by typecheck and manual route smoke testing.
+
 ## Commands
 
 ```bash
@@ -123,6 +147,8 @@ The controller does not calculate money and does not query MongoDB directly. The
 Refunds are stored in a separate append-only collection. A refund can never exceed the order's gross paid amount minus previous refunds, and it uses the same idempotency pattern as payments. Status changes caused by payment or refund activity are written to the append-only `audit_logs` collection. CSV export is ownership-scoped and streams the current order summary fields for an optional inclusive date range.
 
 The order detail dashboard exposes refund creation/history and status audit history. Audit history is read-only; there is no delete or update endpoint for audit records.
+
+Concurrency is handled with transactional payment and refund writes plus atomic balance checks in the repository layer. If two payments race for the same remaining balance, one transaction may fail with `PAYMENT_EXCEEDS_BALANCE` rather than over-allocating funds.
 
 ## MongoDB schema
 

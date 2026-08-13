@@ -11,6 +11,13 @@ export const formatDate = (value: string) => {
   }).format(new Date(`${value.length === 10 ? `${value}T00:00:00` : value}`));
 };
 
+export const formatDateTime = (value: string) => {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+};
+
 export const getDueSummary = (dueDate: string, today = new Date()) => {
   const due = new Date(`${dueDate}T00:00:00Z`);
   const current = new Date(

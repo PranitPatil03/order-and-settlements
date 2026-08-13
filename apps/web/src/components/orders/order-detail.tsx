@@ -38,7 +38,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [paymentLink, setPaymentLink] = useState('');
+  const [paymentLink, setPaymentLink] = useState<{ url: string; accessCode: string } | null>(null);
   const [isCreatingLink, setIsCreatingLink] = useState(false);
 
   useEffect(() => {
@@ -70,9 +70,8 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     setErrorMessage('');
     try {
       const result = await createPaymentLink(order.id);
-      const display = `${result.url}\nAccess code: ${result.accessCode}`;
-      setPaymentLink(display);
-      await navigator.clipboard?.writeText(display);
+      setPaymentLink(result);
+      await navigator.clipboard?.writeText(`${result.url}\nAccess code: ${result.accessCode}`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -92,26 +91,20 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     <main className="min-h-screen bg-background text-foreground">
       <AppHeader userName={session.data?.user.name} />
       <div className="mx-auto max-w-7xl space-y-8 px-6 py-8 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3 shadow-sm">
           <Button variant="outline" onClick={() => router.push('/orders')}>
             <ArrowLeft className="size-4" aria-hidden="true" />
             Back to orders
           </Button>
-          <Button variant="outline" onClick={generatePaymentLink} disabled={isCreatingLink}>
-            <Copy className="size-4" aria-hidden="true" />
-            {isCreatingLink ? 'Creating link...' : 'Share customer payment link'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => router.push(`/orders/${orderId}/refunds`)}>
+              Refunds
+            </Button>
+            <Button variant="outline" onClick={() => router.push(`/orders/${orderId}/audit`)}>
+              Audit
+            </Button>
+          </div>
         </div>
-        {paymentLink ? (
-          <section className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-            <p className="font-medium">Customer link copied</p>
-            <p className="mt-1 break-all text-sky-800">{paymentLink}</p>
-            <p className="mt-2 text-sky-700">
-              Share both the link and access code with the customer. The order owner cannot record
-              payments from this screen.
-            </p>
-          </section>
-        ) : null}
         <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Order detail</p>
@@ -155,36 +148,6 @@ export function OrderDetail({ orderId }: { orderId: string }) {
         </div>
         <section className="rounded-lg border bg-white shadow-sm">
           <div className="border-b p-5">
-            <h2 className="font-semibold">Settlement history</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Review refund activity and status transitions from one place.
-            </p>
-          </div>
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
-            <Button
-              variant="outline"
-              className="h-auto justify-between px-4 py-5"
-              onClick={() => router.push(`/orders/${order.id}/refunds`)}
-            >
-              <div className="text-left">
-                <p className="font-medium">Refunds</p>
-                <p className="text-sm text-muted-foreground">Record and review refund history.</p>
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto justify-between px-4 py-5"
-              onClick={() => router.push(`/orders/${order.id}/audit`)}
-            >
-              <div className="text-left">
-                <p className="font-medium">Audit history</p>
-                <p className="text-sm text-muted-foreground">See order status changes over time.</p>
-              </div>
-            </Button>
-          </div>
-        </section>
-        <section className="rounded-lg border bg-white shadow-sm">
-          <div className="border-b p-5">
             <h2 className="font-semibold">Customer payment history</h2>
           </div>
           {payments.length === 0 ? (
@@ -213,6 +176,23 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </div>
           )}
         </section>
+        <section className="rounded-lg border bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="font-semibold">Customer payment link</h2>
+            </div>
+            <Button onClick={generatePaymentLink} disabled={isCreatingLink}>
+              <Copy className="size-4" aria-hidden="true" />
+              {isCreatingLink ? 'Creating link...' : 'Generate payment link'}
+            </Button>
+          </div>
+          {paymentLink ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <CopyRow label="Payment URL" value={paymentLink.url} />
+              <CopyRow label="Access code" value={paymentLink.accessCode} />
+            </div>
+          ) : null}
+        </section>
       </div>
     </main>
   );
@@ -223,6 +203,26 @@ function Summary({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border bg-white p-5 shadow-sm">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-3 text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-white p-3 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-sky-700">{label}</p>
+      <div className="mt-2 flex items-start gap-3">
+        <p className="min-w-0 flex-1 break-all text-sm text-slate-900">{value}</p>
+        <button
+          className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border bg-slate-50 px-3 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard?.writeText(value);
+          }}
+        >
+          Copy
+        </button>
+      </div>
     </div>
   );
 }

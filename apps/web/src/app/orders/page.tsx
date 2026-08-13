@@ -204,7 +204,9 @@ function OrderTable({ orders }: { orders: Order[] }) {
                 className={`px-5 py-4 ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-muted-foreground'}`}
               >
                 <div>{formatDate(order.dueDate)}</div>
-                <div className="text-xs">{getDueSummary(order.dueDate)}</div>
+                {order.status === 'partially_paid' ? (
+                  <div className="text-xs">{getDueSummary(order.dueDate)}</div>
+                ) : null}
               </td>
               <td className="px-5 py-4 text-right">
                 <Link

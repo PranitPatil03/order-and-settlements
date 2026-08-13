@@ -32,6 +32,19 @@ export function PublicPaymentPage({ token }: { token: string }) {
     [token],
   );
 
+  const openWithCode = useCallback(
+    async (code: string) => {
+      const normalized = code.trim().toUpperCase();
+
+      if (!normalized) return;
+
+      await load(normalized);
+      setCodeInput(normalized);
+      setAccessCode(normalized);
+    },
+    [load],
+  );
+
   useEffect(() => {
     if (!accessCode) return;
     const refresh = () => void load(accessCode).catch(() => undefined);
@@ -39,13 +52,18 @@ export function PublicPaymentPage({ token }: { token: string }) {
     return () => window.clearInterval(interval);
   }, [accessCode, load]);
 
+  useEffect(() => {
+    const fragmentCode = window.location.hash.slice(1).trim();
+    if (!fragmentCode || accessCode) return;
+    void openWithCode(fragmentCode).catch(() => undefined);
+  }, [accessCode, openWithCode]);
+
   const unlock = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await load(codeInput.trim().toUpperCase());
-      setAccessCode(codeInput.trim().toUpperCase());
+      await openWithCode(codeInput);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to open this payment link.');
     } finally {
@@ -81,8 +99,10 @@ export function PublicPaymentPage({ token }: { token: string }) {
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-5 text-slate-950">
         <section className="w-full max-w-md rounded-lg border bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-slate-500">CrossVal payment link</p>
-          <h1 className="mt-2 text-2xl font-semibold">Enter your access code</h1>
-          <p className="mt-2 text-sm text-slate-500">Use the code shared with this payment link.</p>
+          <h1 className="mt-2 text-2xl font-semibold">Opening payment link</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            If the code is not included in the link, enter it below.
+          </p>
           <form className="mt-6 space-y-4" onSubmit={unlock}>
             <div className="space-y-2">
               <Label htmlFor="payment-code">Access code</Label>

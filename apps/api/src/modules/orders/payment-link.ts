@@ -12,8 +12,25 @@ import {
 } from './repository.js';
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
-const stableSecret = (orderId: string, purpose: string) =>
-  createHmac('sha256', env.BETTER_AUTH_SECRET).update(`${purpose}:${orderId}`).digest('base64url');
+
+export const buildPaymentLinkPayload = (
+  orderId: string,
+  webOrigin: string,
+  secret: string,
+) => {
+  const token = createHmac('sha256', secret).update(`payment-link:${orderId}`).digest('base64url');
+  const accessCode = createHmac('sha256', secret)
+    .update(`payment-code:${orderId}`)
+    .digest('base64url')
+    .slice(0, 10)
+    .toUpperCase();
+
+  return {
+    token,
+    accessCode,
+    url: `${webOrigin}/pay/${token}#${accessCode}`,
+  };
+};
 
 export const createPaymentLinkUseCase = async (userId: string, orderIdValue: string) => {
   const orderId = parseObjectId(orderIdValue, 'orderId');
@@ -21,22 +38,26 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
 
   if (!order) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
 
-  const token = stableSecret(orderId.toHexString(), 'payment-link');
-  const accessCode = stableSecret(orderId.toHexString(), 'payment-code').slice(0, 10).toUpperCase();
+  const paymentLink = buildPaymentLinkPayload(orderId.toHexString(), env.WEB_ORIGIN, env.BETTER_AUTH_SECRET);
   if (order.paymentLinkTokenHash && order.paymentLinkAccessCodeHash && !order.paymentLinkRevokedAt) {
     return {
-      url: `${env.WEB_ORIGIN}/pay/${token}`,
-      accessCode,
+      url: paymentLink.url,
+      accessCode: paymentLink.accessCode,
       createdAt: order.paymentLinkCreatedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
-  const saved = await savePaymentLink(userId, orderId, hashToken(token), hashToken(accessCode));
+  const saved = await savePaymentLink(
+    userId,
+    orderId,
+    hashToken(paymentLink.token),
+    hashToken(paymentLink.accessCode),
+  );
 
   if (!saved) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
 
   return {
-    url: `${env.WEB_ORIGIN}/pay/${token}`,
-    accessCode,
+    url: paymentLink.url,
+    accessCode: paymentLink.accessCode,
     createdAt: saved.paymentLinkCreatedAt?.toISOString() ?? new Date().toISOString(),
   };
 };
