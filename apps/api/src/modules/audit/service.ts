@@ -18,3 +18,6 @@ export const recordStatusChange = async (
     { _id: new ObjectId(), ...input, eventType: 'order.status_changed', occurredAt: new Date() },
     { session },
   );
+
+export const listStatusChanges = async (userId: string, orderId: ObjectId) =>
+  logs().find({ userId, orderId }).sort({ occurredAt: -1 }).toArray();

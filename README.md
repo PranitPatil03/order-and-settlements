@@ -31,6 +31,36 @@ pnpm format:check
 
 The API runs on `http://localhost:4000` and the web app runs on the Next.js development port. Restart the dev server after changing `NEXT_PUBLIC_API_URL`, because Next.js bundles public environment variables at startup.
 
+## Deployment
+
+The repository includes `railway.toml` for the Express API and `vercel.json` for the Next.js frontend.
+
+### Railway API
+
+Create a Railway service from this repository and set these variables:
+
+```text
+NODE_ENV=production
+PORT=4000
+MONGODB_URI=<MongoDB Atlas connection string>
+MONGODB_DB_NAME=orders_and_settlements
+BETTER_AUTH_SECRET=<random secret of at least 32 characters>
+BETTER_AUTH_URL=https://<railway-api-domain>
+WEB_ORIGIN=https://<vercel-frontend-domain>
+```
+
+Railway uses the repository `railway.toml`, builds the API package, starts `dist/server.js`, and checks `/health`.
+
+### Vercel frontend
+
+Import the same repository into Vercel and set:
+
+```text
+NEXT_PUBLIC_API_URL=https://<railway-api-domain>
+```
+
+The Vercel project must use the repository root so the workspace lockfile and `vercel.json` are available. After the first deploy, copy the Vercel production URL into Railway's `WEB_ORIGIN`, then redeploy the API. The deployed URL should be added to this README and the submission email.
+
 ## API foundation
 
 The API uses route, controller, service, domain, and repository layers. Orders are scoped by the authenticated user, line-item totals are calculated on the server, and order status is derived from totals and the UTC due date.
@@ -47,6 +77,7 @@ POST   /api/orders/:orderId/payment-link
 DELETE /api/orders/:orderId/payment-link
 GET    /api/orders/:orderId/refunds
 POST   /api/orders/:orderId/refunds
+GET    /api/orders/:orderId/audit-logs
 GET    /api/orders/export?from=YYYY-MM-DD&to=YYYY-MM-DD
 ```
 
@@ -90,6 +121,8 @@ HTTP request
 The controller does not calculate money and does not query MongoDB directly. The service validates the use case, calls pure domain functions, and asks the repository to persist data. This keeps financial rules easy to test and prevents HTTP concerns from leaking into the business layer.
 
 Refunds are stored in a separate append-only collection. A refund can never exceed the order's gross paid amount minus previous refunds, and it uses the same idempotency pattern as payments. Status changes caused by payment or refund activity are written to the append-only `audit_logs` collection. CSV export is ownership-scoped and streams the current order summary fields for an optional inclusive date range.
+
+The order detail dashboard exposes refund creation/history and status audit history. Audit history is read-only; there is no delete or update endpoint for audit records.
 
 ## MongoDB schema
 
@@ -197,7 +230,7 @@ Frontend routes:
 /signup                 email/password account creation
 /orders                 authenticated dashboard and status filter
 /orders/new             create an order with line items
-/orders/:orderId        order detail, payment form, and payment history
+/orders/:orderId        order detail, refunds, audit history, and payment history
 ```
 
 The dashboard loads the authenticated session first. If no session exists, it redirects to `/login`. Once authenticated, it loads orders from `GET /api/orders`, computes dashboard summary values from the server response, and renders status badges using the same four domain statuses as the API.

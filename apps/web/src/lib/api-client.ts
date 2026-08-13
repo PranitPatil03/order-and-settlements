@@ -43,6 +43,24 @@ export type Payment = {
   createdAt: string;
 };
 
+export type Refund = {
+  id: string;
+  orderId: string;
+  amountCents: number;
+  refundedAt: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type AuditLog = {
+  id: string;
+  orderId: string;
+  eventType: string;
+  fromStatus: string | null;
+  toStatus: string;
+  occurredAt: string;
+};
+
 type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown };
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
@@ -103,6 +121,27 @@ export async function getOrder(orderId: string) {
 
 export async function getPayments(orderId: string) {
   const response = await apiRequest<{ data: Payment[] }>(`/api/orders/${orderId}/payments`);
+  return response.data;
+}
+
+export async function getRefunds(orderId: string) {
+  const response = await apiRequest<{ data: Refund[] }>(`/api/orders/${orderId}/refunds`);
+  return response.data;
+}
+
+export async function recordRefund(
+  orderId: string,
+  input: { amountCents: number; refundedAt: string; note?: string },
+) {
+  const response = await apiRequest<{ data: { refund: Refund; order: Order } }>(
+    `/api/orders/${orderId}/refunds`,
+    { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: input },
+  );
+  return response.data;
+}
+
+export async function getAuditLogs(orderId: string) {
+  const response = await apiRequest<{ data: AuditLog[] }>(`/api/orders/${orderId}/audit-logs`);
   return response.data;
 }
 

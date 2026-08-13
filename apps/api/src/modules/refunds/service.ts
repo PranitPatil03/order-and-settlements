@@ -16,6 +16,9 @@ import { toRefundResponse } from './mapper.js';
 import type { RecordRefundInput } from './schema.js';
 import type { RefundDocument } from './types.js';
 
+const refundAlreadyExists = (error: unknown) =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === 11000;
+
 export const recordRefundUseCase = async (
   userId: string,
   orderIdValue: string,
@@ -56,6 +59,14 @@ export const recordRefundUseCase = async (
         await recordStatusChange({ userId, orderId, fromStatus, toStatus }, session);
       return { refund: toRefundResponse(refund), order: toOrderResponse(updated), replayed: false };
     });
+  } catch (error: unknown) {
+    if (refundAlreadyExists(error)) {
+      const replay = await findRefundByIdempotencyKey(userId, idempotencyKey);
+      const order = await findOrderForRefund(userId, orderId);
+      if (replay && order)
+        return { refund: toRefundResponse(replay), order: toOrderResponse(order), replayed: true };
+    }
+    throw error;
   } finally {
     await session.endSession();
   }
