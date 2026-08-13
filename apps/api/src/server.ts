@@ -2,9 +2,11 @@ import { app } from './app.js';
 import { env } from './config/environment.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { logger } from './common/logger.js';
+import { ensureOrderIndexes } from './modules/orders/repository.js';
 
 const start = async () => {
   await connectDatabase();
+  await ensureOrderIndexes();
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'API server started');
