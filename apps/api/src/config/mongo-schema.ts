@@ -69,6 +69,45 @@ export const paymentsCollectionValidator: Document = {
   },
 };
 
+export const refundsCollectionValidator: Document = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: [
+      'userId',
+      'orderId',
+      'amountCents',
+      'refundedAt',
+      'note',
+      'idempotencyKey',
+      'createdAt',
+    ],
+    properties: {
+      userId: { bsonType: 'string', minLength: 1 },
+      orderId: { bsonType: 'objectId' },
+      amountCents: { bsonType: ['int', 'long'], minimum: 1 },
+      refundedAt: { bsonType: 'date' },
+      note: { bsonType: ['string', 'null'], maxLength: 1_000 },
+      idempotencyKey: { bsonType: 'string', minLength: 1, maxLength: 200 },
+      createdAt: { bsonType: 'date' },
+    },
+  },
+};
+
+export const auditLogsCollectionValidator: Document = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['userId', 'orderId', 'eventType', 'fromStatus', 'toStatus', 'occurredAt'],
+    properties: {
+      userId: { bsonType: 'string', minLength: 1 },
+      orderId: { bsonType: 'objectId' },
+      eventType: { bsonType: 'string', minLength: 1, maxLength: 100 },
+      fromStatus: { bsonType: ['string', 'null'] },
+      toStatus: { bsonType: 'string', minLength: 1, maxLength: 50 },
+      occurredAt: { bsonType: 'date' },
+    },
+  },
+};
+
 export const ensureOrdersCollection = async () => {
   const collectionExists = await database().listCollections({ name: 'orders' }).hasNext();
 
@@ -87,6 +126,26 @@ export const ensurePaymentsCollection = async () => {
   if (!collectionExists) {
     await database().createCollection('payments', {
       validator: paymentsCollectionValidator,
+      validationLevel: 'strict',
+      validationAction: 'error',
+    });
+  }
+};
+
+export const ensureRefundsCollection = async () => {
+  if (!(await database().listCollections({ name: 'refunds' }).hasNext())) {
+    await database().createCollection('refunds', {
+      validator: refundsCollectionValidator,
+      validationLevel: 'strict',
+      validationAction: 'error',
+    });
+  }
+};
+
+export const ensureAuditLogsCollection = async () => {
+  if (!(await database().listCollections({ name: 'audit_logs' }).hasNext())) {
+    await database().createCollection('audit_logs', {
+      validator: auditLogsCollectionValidator,
       validationLevel: 'strict',
       validationAction: 'error',
     });

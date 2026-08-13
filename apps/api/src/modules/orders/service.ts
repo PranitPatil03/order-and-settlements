@@ -5,11 +5,17 @@ import {
   createOrder,
   findOrderById,
   findOrders,
+  findOrdersForExport,
   softDeleteOrder,
   updateOrder,
 } from './repository.js';
 import { assertOrderCanBeDeleted, assertOrderCanChangeLineItems } from './policy.js';
-import type { CreateOrderInput, ListOrdersInput, UpdateOrderInput } from './schema.js';
+import type {
+  CreateOrderInput,
+  ExportOrdersInput,
+  ListOrdersInput,
+  UpdateOrderInput,
+} from './schema.js';
 import { toOrderResponse } from './mapper.js';
 
 const getOrderOrThrow = async (userId: string, orderId: string) => {
@@ -44,6 +50,12 @@ export const listOrdersUseCase = async (userId: string, input: ListOrdersInput) 
       totalPages: Math.ceil(filteredOrders.length / input.limit),
     },
   };
+};
+
+export const exportOrdersUseCase = async (userId: string, input: ExportOrdersInput) => {
+  if (input.from && input.to && input.from > input.to)
+    throw new AppError('INVALID_DATE_RANGE', '`from` must be before `to`.', 400);
+  return (await findOrdersForExport(userId, input.from, input.to)).map(toOrderResponse);
 };
 
 export const getOrderUseCase = async (userId: string, orderId: string) => {

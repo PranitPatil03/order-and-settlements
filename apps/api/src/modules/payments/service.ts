@@ -14,6 +14,8 @@ import {
 import { toPaymentResponse } from './mapper.js';
 import type { RecordPaymentInput } from './schema.js';
 import type { PaymentDocument } from './types.js';
+import { calculateOrderStatus } from '../../domain/order-status.js';
+import { recordStatusChange } from '../audit/service.js';
 
 const paymentAlreadyExists = (error: unknown) => {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 11000;
@@ -80,6 +82,10 @@ export const recordPaymentUseCase = async (
         };
       }
 
+      const beforeOrder = await findOrderForPayment(userId, orderId, session);
+      if (!beforeOrder) {
+        throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
+      }
       const updatedOrder = await incrementOrderPaidTotal(
         userId,
         orderId,
@@ -88,18 +94,12 @@ export const recordPaymentUseCase = async (
       );
 
       if (!updatedOrder) {
-        const order = await findOrderForPayment(userId, orderId, session);
-
-        if (!order) {
-          throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
-        }
-
         throw new AppError(
           'PAYMENT_EXCEEDS_BALANCE',
           'Payment exceeds the remaining order balance.',
           409,
           {
-            maximumAllowedCents: Math.max(0, order.totalCents - order.grossPaidCents),
+            maximumAllowedCents: Math.max(0, beforeOrder.totalCents - beforeOrder.grossPaidCents),
             requestedAmountCents: input.amountCents,
           },
         );
@@ -117,6 +117,11 @@ export const recordPaymentUseCase = async (
       };
 
       await insertPayment(payment, session);
+      const fromStatus = calculateOrderStatus(beforeOrder);
+      const toStatus = calculateOrderStatus(updatedOrder);
+      if (fromStatus !== toStatus) {
+        await recordStatusChange({ userId, orderId, fromStatus, toStatus }, session);
+      }
 
       return {
         payment: toPaymentResponse(payment),

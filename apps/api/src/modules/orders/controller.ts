@@ -7,10 +7,17 @@ import {
   deleteOrderUseCase,
   getOrderUseCase,
   listOrdersUseCase,
+  exportOrdersUseCase,
   updateOrderUseCase,
 } from './service.js';
 import { createPaymentLinkUseCase, revokePaymentLinkUseCase } from './payment-link.js';
-import { createOrderSchema, listOrdersSchema, orderIdSchema, updateOrderSchema } from './schema.js';
+import {
+  createOrderSchema,
+  exportOrdersSchema,
+  listOrdersSchema,
+  orderIdSchema,
+  updateOrderSchema,
+} from './schema.js';
 
 const getUserId = (request: Request) => {
   const userId = (request as AuthenticatedRequest).user?.id;
@@ -30,6 +37,45 @@ export const createOrder = async (request: Request, response: Response) => {
 export const listOrders = async (request: Request, response: Response) => {
   const input = listOrdersSchema.parse(request.query);
   response.status(200).json({ data: await listOrdersUseCase(getUserId(request), input) });
+};
+
+const csv = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
+export const exportOrders = async (request: Request, response: Response) => {
+  const orders = await exportOrdersUseCase(
+    getUserId(request),
+    exportOrdersSchema.parse(request.query),
+  );
+  const rows = [
+    [
+      'order_id',
+      'customer',
+      'due_date',
+      'currency',
+      'total',
+      'gross_paid',
+      'refunded',
+      'net_paid',
+      'amount_due',
+      'status',
+      'created_at',
+    ],
+    ...orders.map((order) => [
+      order.id,
+      order.customer,
+      order.dueDate,
+      order.currency,
+      order.totalCents,
+      order.grossPaidCents,
+      order.refundedTotalCents,
+      order.netPaidCents,
+      order.amountDueCents,
+      order.status,
+      order.createdAt,
+    ]),
+  ];
+  response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  response.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
+  response.send(rows.map((row) => row.map(csv).join(',')).join('\n'));
 };
 
 export const getOrder = async (request: Request, response: Response) => {

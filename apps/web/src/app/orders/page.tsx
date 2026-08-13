@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CircleDollarSign, LoaderCircle, Plus } from 'lucide-react';
+import { ArrowRight, CircleDollarSign, Download, LoaderCircle, Plus } from 'lucide-react';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
-import { getOrders, type Order, type OrderStatus } from '@/lib/api-client';
+import { downloadOrdersCsv, getOrders, type Order, type OrderStatus } from '@/lib/api-client';
 import { formatDate, formatMoney } from '@/lib/format';
 
 const statusStyles: Record<OrderStatus, string> = {
@@ -33,6 +33,7 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<OrderStatus | 'all'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!session.isPending && !session.data) router.replace('/login');
@@ -68,6 +69,17 @@ export default function OrdersPage() {
     [orders],
   );
 
+  const exportCsv = async () => {
+    setIsExporting(true);
+    try {
+      await downloadOrdersCsv();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export orders.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (session.isPending || (!session.data && !errorMessage)) {
     return <LoadingScreen />;
   }
@@ -84,10 +96,16 @@ export default function OrdersPage() {
               Track totals, payments, and outstanding balances.
             </p>
           </div>
-          <Button onClick={() => router.push('/orders/new')}>
-            <Plus className="size-4" aria-hidden="true" />
-            Create order
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" onClick={exportCsv} disabled={isExporting}>
+              <Download className="size-4" aria-hidden="true" />
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+            <Button onClick={() => router.push('/orders/new')}>
+              <Plus className="size-4" aria-hidden="true" />
+              Create order
+            </Button>
+          </div>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-3" aria-label="Order summary">

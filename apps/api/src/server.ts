@@ -4,11 +4,15 @@ import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { logger } from './common/logger.js';
 import { ensureOrderIndexes } from './modules/orders/repository.js';
 import { ensurePaymentIndexes } from './modules/payments/repository.js';
+import { ensureRefundIndexes } from './modules/refunds/repository.js';
+import { ensureAuditIndexes } from './modules/audit/service.js';
 
 const start = async () => {
   await connectDatabase();
   await ensureOrderIndexes();
   await ensurePaymentIndexes();
+  await ensureRefundIndexes();
+  await ensureAuditIndexes();
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'API server started');

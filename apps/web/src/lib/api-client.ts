@@ -72,6 +72,18 @@ export async function getOrders(status?: OrderStatus) {
   return response.data.items;
 }
 
+export async function downloadOrdersCsv() {
+  const response = await fetch(`${apiUrl}/api/orders/export`, { credentials: 'include' });
+  if (!response.ok) throw new Error('Unable to export orders.');
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'orders.csv';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function createOrder(input: {
   customer: string;
   dueDate: string;

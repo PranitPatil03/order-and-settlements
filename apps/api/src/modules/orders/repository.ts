@@ -92,6 +92,16 @@ export const findOrders = async (userId: string) => {
   return orders().find({ userId, deletedAt: null }).sort({ createdAt: -1 }).toArray();
 };
 
+export const findOrdersForExport = async (userId: string, from?: string, to?: string) => {
+  const createdAt: Record<string, Date> = {};
+  if (from) createdAt.$gte = new Date(`${from}T00:00:00.000Z`);
+  if (to) createdAt.$lt = new Date(`${to}T00:00:00.000Z`);
+  return orders()
+    .find({ userId, deletedAt: null, ...(Object.keys(createdAt).length ? { createdAt } : {}) })
+    .sort({ createdAt: -1 })
+    .toArray();
+};
+
 export const findOrderById = async (userId: string, orderId: ObjectId) => {
   return orders().findOne({ _id: orderId, userId, deletedAt: null });
 };

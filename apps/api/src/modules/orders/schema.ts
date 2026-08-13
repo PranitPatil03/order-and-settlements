@@ -25,6 +25,11 @@ export const listOrdersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const exportOrdersSchema = z.object({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
+
 export const orderIdSchema = z.object({
   orderId: z.string().min(1),
 });
@@ -32,3 +37,4 @@ export const orderIdSchema = z.object({
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type ListOrdersInput = z.infer<typeof listOrdersSchema>;
+export type ExportOrdersInput = z.infer<typeof exportOrdersSchema>;

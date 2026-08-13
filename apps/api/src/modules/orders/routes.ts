@@ -6,6 +6,7 @@ import {
   createOrder,
   createPaymentLink,
   deleteOrder,
+  exportOrders,
   getOrder,
   listOrders,
   revokePaymentLink,
@@ -16,6 +17,7 @@ const ordersRouter = Router();
 
 ordersRouter.use(requireAuth);
 ordersRouter.get('/', asyncHandler(listOrders));
+ordersRouter.get('/export', asyncHandler(exportOrders));
 ordersRouter.post('/', asyncHandler(createOrder));
 ordersRouter.get('/:orderId', asyncHandler(getOrder));
 ordersRouter.post('/:orderId/payment-link', asyncHandler(createPaymentLink));
