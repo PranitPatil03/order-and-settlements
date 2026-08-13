@@ -13,6 +13,10 @@ export type OrderDocument = {
   totalCents: number;
   grossPaidCents: number;
   refundedTotalCents: number;
+  paymentLinkTokenHash: string | null;
+  paymentLinkAccessCodeHash: string | null;
+  paymentLinkCreatedAt: Date | null;
+  paymentLinkRevokedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -33,4 +37,8 @@ export type OrderResponse = {
   status: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PublicOrderResponse = OrderResponse & {
+  paymentLinkActive: boolean;
 };

@@ -108,3 +108,34 @@ export async function recordPayment(
   );
   return response.data;
 }
+
+export async function createPaymentLink(orderId: string) {
+  const response = await apiRequest<{
+    data: { url: string; accessCode: string; createdAt: string };
+  }>(`/api/orders/${orderId}/payment-link`, { method: 'POST' });
+  return response.data;
+}
+
+export async function getPublicOrder(token: string, accessCode: string) {
+  const response = await apiRequest<{ data: { order: Order; payments: Payment[] } }>(
+    `/api/public/payment-links/${token}`,
+    { headers: { 'X-Payment-Code': accessCode } },
+  );
+  return response.data;
+}
+
+export async function payPublicOrder(
+  token: string,
+  accessCode: string,
+  input: { amountCents: number; note?: string },
+) {
+  const response = await apiRequest<{ data: { order: Order } }>(
+    `/api/public/payment-links/${token}/payments`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID(), 'X-Payment-Code': accessCode },
+      body: input,
+    },
+  );
+  return response.data;
+}

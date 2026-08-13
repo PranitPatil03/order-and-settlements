@@ -12,6 +12,12 @@ export const ensureOrderIndexes = async () => {
   await orders().createIndexes([
     { key: { userId: 1, createdAt: -1 }, name: 'orders_user_created' },
     { key: { userId: 1, dueDate: 1 }, name: 'orders_user_due_date' },
+    {
+      key: { paymentLinkTokenHash: 1 },
+      name: 'orders_payment_link_token',
+      unique: true,
+      sparse: true,
+    },
   ]);
 };
 
@@ -32,6 +38,10 @@ export const createOrder = async (
     totalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
     grossPaidCents: 0,
     refundedTotalCents: 0,
+    paymentLinkTokenHash: null,
+    paymentLinkAccessCodeHash: null,
+    paymentLinkCreatedAt: null,
+    paymentLinkRevokedAt: null,
     deletedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -39,6 +49,43 @@ export const createOrder = async (
 
   await orders().insertOne(document);
   return document;
+};
+
+export const findOrderByPaymentLinkHash = async (tokenHash: string) => {
+  return orders().findOne({
+    paymentLinkTokenHash: tokenHash,
+    paymentLinkRevokedAt: null,
+    deletedAt: null,
+  });
+};
+
+export const savePaymentLink = async (
+  userId: string,
+  orderId: ObjectId,
+  tokenHash: string,
+  accessCodeHash: string,
+) => {
+  return orders().findOneAndUpdate(
+    { _id: orderId, userId, deletedAt: null },
+    {
+      $set: {
+        paymentLinkTokenHash: tokenHash,
+        paymentLinkAccessCodeHash: accessCodeHash,
+        paymentLinkCreatedAt: new Date(),
+        paymentLinkRevokedAt: null,
+        updatedAt: new Date(),
+      },
+    },
+    { returnDocument: 'after' },
+  );
+};
+
+export const revokePaymentLink = async (userId: string, orderId: ObjectId) => {
+  return orders().findOneAndUpdate(
+    { _id: orderId, userId, deletedAt: null },
+    { $set: { paymentLinkRevokedAt: new Date(), updatedAt: new Date() } },
+    { returnDocument: 'after' },
+  );
 };
 
 export const findOrders = async (userId: string) => {

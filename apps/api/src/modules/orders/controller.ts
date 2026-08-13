@@ -9,6 +9,7 @@ import {
   listOrdersUseCase,
   updateOrderUseCase,
 } from './service.js';
+import { createPaymentLinkUseCase, revokePaymentLinkUseCase } from './payment-link.js';
 import { createOrderSchema, listOrdersSchema, orderIdSchema, updateOrderSchema } from './schema.js';
 
 const getUserId = (request: Request) => {
@@ -45,5 +46,16 @@ export const updateOrder = async (request: Request, response: Response) => {
 export const deleteOrder = async (request: Request, response: Response) => {
   const { orderId } = orderIdSchema.parse(request.params);
   await deleteOrderUseCase(getUserId(request), orderId);
+  response.status(204).send();
+};
+
+export const createPaymentLink = async (request: Request, response: Response) => {
+  const { orderId } = orderIdSchema.parse(request.params);
+  response.status(201).json({ data: await createPaymentLinkUseCase(getUserId(request), orderId) });
+};
+
+export const revokePaymentLink = async (request: Request, response: Response) => {
+  const { orderId } = orderIdSchema.parse(request.params);
+  await revokePaymentLinkUseCase(getUserId(request), orderId);
   response.status(204).send();
 };

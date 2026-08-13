@@ -1,17 +1,20 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
-import { ArrowLeft, CircleDollarSign, LoaderCircle, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, CircleDollarSign, Copy, LoaderCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { authClient } from '@/lib/auth-client';
-import { getOrder, getPayments, recordPayment, type Order, type Payment } from '@/lib/api-client';
+import {
+  createPaymentLink,
+  getOrder,
+  getPayments,
+  type Order,
+  type Payment,
+} from '@/lib/api-client';
 import { formatDate, formatMoney } from '@/lib/format';
 
 const statusStyles = {
@@ -35,10 +38,8 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 16));
-  const [note, setNote] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [isCreatingLink, setIsCreatingLink] = useState(false);
 
   useEffect(() => {
     if (!session.isPending && !session.data) router.replace('/login');
@@ -63,25 +64,19 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     void load();
   }, [orderId, session.data]);
 
-  const submitPayment = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const generatePaymentLink = async () => {
     if (!order) return;
+    setIsCreatingLink(true);
     setErrorMessage('');
-    setIsSubmitting(true);
     try {
-      const result = await recordPayment(order.id, {
-        amountCents: Math.round(Number(amount) * 100),
-        paidAt: new Date(paidAt).toISOString(),
-        note: note || undefined,
-      });
-      setOrder(result.order);
-      setPayments(await getPayments(order.id));
-      setAmount('');
-      setNote('');
+      const result = await createPaymentLink(order.id);
+      const display = `${result.url}\nAccess code: ${result.accessCode}`;
+      setPaymentLink(display);
+      await navigator.clipboard?.writeText(display);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to record payment.');
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
-      setIsSubmitting(false);
+      setIsCreatingLink(false);
     }
   };
 
@@ -97,10 +92,26 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     <main className="min-h-screen bg-background text-foreground">
       <AppHeader userName={session.data?.user.name} />
       <div className="mx-auto max-w-7xl space-y-8 px-6 py-8 lg:px-8">
-        <Button variant="outline" onClick={() => router.push('/orders')}>
-          <ArrowLeft className="size-4" aria-hidden="true" />
-          Back to orders
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button variant="outline" onClick={() => router.push('/orders')}>
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Back to orders
+          </Button>
+          <Button variant="outline" onClick={generatePaymentLink} disabled={isCreatingLink}>
+            <Copy className="size-4" aria-hidden="true" />
+            {isCreatingLink ? 'Creating link...' : 'Share customer payment link'}
+          </Button>
+        </div>
+        {paymentLink ? (
+          <section className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+            <p className="font-medium">Customer link copied</p>
+            <p className="mt-1 break-all text-sky-800">{paymentLink}</p>
+            <p className="mt-2 text-sky-700">
+              Share both the link and access code with the customer. The order owner cannot record
+              payments from this screen.
+            </p>
+          </section>
+        ) : null}
         <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-medium text-muted-foreground">Order detail</p>
@@ -115,7 +126,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           <Summary label="Refunded" value={formatMoney(order.refundedTotalCents, order.currency)} />
           <Summary label="Amount due" value={formatMoney(order.amountDueCents, order.currency)} />
         </section>
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-6">
           <section className="rounded-lg border bg-white shadow-sm">
             <div className="border-b p-5">
               <h2 className="font-semibold">Line items</h2>
@@ -137,61 +148,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               ))}
             </div>
           </section>
-          <section className="rounded-lg border bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Plus className="size-4 text-primary" aria-hidden="true" />
-              <h2 className="font-semibold">Record payment</h2>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Maximum available:{' '}
-              {formatMoney(Math.max(0, order.totalCents - order.grossPaidCents), order.currency)}
-            </p>
-            <form className="mt-5 space-y-4" onSubmit={submitPayment}>
-              <div className="space-y-2">
-                <Label htmlFor="payment-amount">Amount</Label>
-                <Input
-                  id="payment-amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment-date">Payment date</Label>
-                <Input
-                  id="payment-date"
-                  type="datetime-local"
-                  value={paidAt}
-                  onChange={(event) => setPaidAt(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment-note">Note</Label>
-                <Textarea
-                  id="payment-note"
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder="Optional note"
-                />
-              </div>
-              {errorMessage ? (
-                <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {errorMessage}
-                </p>
-              ) : null}
-              <Button className="w-full" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Recording...' : 'Record payment'}
-              </Button>
-            </form>
-          </section>
         </div>
         <section className="rounded-lg border bg-white shadow-sm">
           <div className="border-b p-5">
-            <h2 className="font-semibold">Payment history</h2>
+            <h2 className="font-semibold">Customer payment history</h2>
           </div>
           {payments.length === 0 ? (
             <div className="flex min-h-32 items-center justify-center p-5 text-sm text-muted-foreground">

@@ -1,5 +1,5 @@
 import { calculateNetPaidCents, calculateOrderStatus } from '../../domain/order-status.js';
-import type { OrderDocument, OrderResponse } from './types.js';
+import type { OrderDocument, OrderResponse, PublicOrderResponse } from './types.js';
 
 export const toOrderResponse = (order: OrderDocument): OrderResponse => {
   const netPaidCents = calculateNetPaidCents(order);
@@ -21,3 +21,9 @@ export const toOrderResponse = (order: OrderDocument): OrderResponse => {
     updatedAt: order.updatedAt.toISOString(),
   };
 };
+
+export const toPublicOrderResponse = (order: OrderDocument): PublicOrderResponse => ({
+  ...toOrderResponse(order),
+  paymentLinkActive:
+    order.paymentLinkRevokedAt === null && order.paymentLinkAccessCodeHash !== null,
+});
