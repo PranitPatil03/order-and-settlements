@@ -1,7 +1,7 @@
 {
   "name": "orders-and-settlements",
   "private": true,
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@10.17.1",
   "engines": {
     "node": ">=22 <25"
   },
