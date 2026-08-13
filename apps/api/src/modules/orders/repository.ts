@@ -1,19 +1,25 @@
 import { ObjectId } from 'mongodb';
 
-import { mongoClient } from '../../config/database.js';
+import { database } from '../../config/database.js';
+import { ensureOrdersCollection } from '../../config/mongo-schema.js';
 import type { CreateOrderInput, UpdateOrderInput } from './schema.js';
 import type { OrderDocument } from './types.js';
 
-const orders = () => mongoClient.db().collection<OrderDocument>('orders');
+const orders = () => database().collection<OrderDocument>('orders');
 
 export const ensureOrderIndexes = async () => {
+  await ensureOrdersCollection();
   await orders().createIndexes([
     { key: { userId: 1, createdAt: -1 }, name: 'orders_user_created' },
     { key: { userId: 1, dueDate: 1 }, name: 'orders_user_due_date' },
   ]);
 };
 
-export const createOrder = async (userId: string, input: CreateOrderInput, lineItems: OrderDocument['lineItems']) => {
+export const createOrder = async (
+  userId: string,
+  input: CreateOrderInput,
+  lineItems: OrderDocument['lineItems'],
+) => {
   const now = new Date();
   const document: OrderDocument = {
     _id: new ObjectId(),

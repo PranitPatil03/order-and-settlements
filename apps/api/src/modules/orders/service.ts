@@ -30,7 +30,9 @@ export const createOrderUseCase = async (userId: string, input: CreateOrderInput
 
 export const listOrdersUseCase = async (userId: string, input: ListOrdersInput) => {
   const allOrders = (await findOrders(userId)).map(toOrderResponse);
-  const filteredOrders = input.status ? allOrders.filter((order) => order.status === input.status) : allOrders;
+  const filteredOrders = input.status
+    ? allOrders.filter((order) => order.status === input.status)
+    : allOrders;
   const start = (input.page - 1) * input.limit;
 
   return {
@@ -48,14 +50,19 @@ export const getOrderUseCase = async (userId: string, orderId: string) => {
   return toOrderResponse(await getOrderOrThrow(userId, orderId));
 };
 
-export const updateOrderUseCase = async (userId: string, orderId: string, input: UpdateOrderInput) => {
+export const updateOrderUseCase = async (
+  userId: string,
+  orderId: string,
+  input: UpdateOrderInput,
+) => {
   const currentOrder = await getOrderOrThrow(userId, orderId);
 
   if (input.lineItems !== undefined) {
     assertOrderCanChangeLineItems(currentOrder);
   }
 
-  const lineItems = input.lineItems === undefined ? undefined : calculateOrderTotals(input.lineItems).lineItems;
+  const lineItems =
+    input.lineItems === undefined ? undefined : calculateOrderTotals(input.lineItems).lineItems;
   const updatedOrder = await updateOrder(userId, currentOrder._id, input, lineItems);
 
   if (!updatedOrder) {
