@@ -12,6 +12,10 @@ export const calculateNetPaidCents = ({ grossPaidCents, refundedTotalCents }: St
   return Math.max(0, grossPaidCents - refundedTotalCents);
 };
 
+export const calculateRemainingBalanceCents = (snapshot: StatusSnapshot) => {
+  return Math.max(0, snapshot.totalCents - calculateNetPaidCents(snapshot));
+};
+
 export const calculateOrderStatus = (snapshot: StatusSnapshot): OrderStatus => {
   const netPaidCents = calculateNetPaidCents(snapshot);
   const today = snapshot.today ?? new Date().toISOString().slice(0, 10);

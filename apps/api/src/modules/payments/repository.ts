@@ -53,8 +53,13 @@ export const incrementOrderPaidTotal = async (
       deletedAt: null,
       $expr: {
         $lte: [
-          { $add: ['$grossPaidCents', amountCents] },
-          { $add: ['$totalCents', '$refundedTotalCents'] },
+          amountCents,
+          {
+            $subtract: [
+              { $add: ['$totalCents', '$refundedTotalCents'] },
+              '$grossPaidCents',
+            ],
+          },
         ],
       },
     },

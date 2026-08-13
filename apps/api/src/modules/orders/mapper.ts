@@ -1,4 +1,8 @@
-import { calculateNetPaidCents, calculateOrderStatus } from '../../domain/order-status.js';
+import {
+  calculateNetPaidCents,
+  calculateOrderStatus,
+  calculateRemainingBalanceCents,
+} from '../../domain/order-status.js';
 import type { OrderDocument, OrderResponse, PublicOrderResponse } from './types.js';
 
 export const toOrderResponse = (order: OrderDocument): OrderResponse => {
@@ -15,7 +19,7 @@ export const toOrderResponse = (order: OrderDocument): OrderResponse => {
     grossPaidCents: order.grossPaidCents,
     refundedTotalCents: order.refundedTotalCents,
     netPaidCents,
-    amountDueCents: Math.max(0, order.totalCents - netPaidCents),
+    amountDueCents: calculateRemainingBalanceCents(order),
     status: calculateOrderStatus(order),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),

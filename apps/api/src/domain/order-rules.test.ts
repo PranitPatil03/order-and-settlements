@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { calculateOrderTotals } from './order-totals.js';
-import { calculateOrderStatus } from './order-status.js';
+import {
+  calculateNetPaidCents,
+  calculateOrderStatus,
+  calculateRemainingBalanceCents,
+} from './order-status.js';
 
 test('calculates line totals and order subtotal in cents', () => {
   const result = calculateOrderTotals([
@@ -67,4 +71,17 @@ test('a refund can move a paid order back to partially paid', () => {
     }),
     'partially_paid',
   );
+});
+
+test('remaining balance reflects refunded payments', () => {
+  const snapshot = {
+    totalCents: 50000,
+    grossPaidCents: 25000,
+    refundedTotalCents: 5000,
+    dueDate: '2099-01-01',
+    today: '2026-01-01',
+  };
+
+  assert.equal(calculateNetPaidCents(snapshot), 20000);
+  assert.equal(calculateRemainingBalanceCents(snapshot), 30000);
 });

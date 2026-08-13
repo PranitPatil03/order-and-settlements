@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,11 +113,22 @@ export function PublicPaymentPage({ token }: { token: string }) {
         <header>
           <p className="text-sm font-medium text-slate-500">CrossVal payment link</p>
           <h1 className="mt-2 text-3xl font-semibold">Payment for {order.customer}</h1>
-          <p
-            className={`mt-2 text-sm ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-slate-500'}`}
-          >
-            Due {formatDate(order.dueDate)} · {getDueSummary(order.dueDate)}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Badge
+              className={
+                order.status === 'overdue'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-slate-100 text-slate-700'
+              }
+            >
+              {order.status === 'overdue' ? 'Overdue' : 'On track'}
+            </Badge>
+            <p
+              className={`text-sm ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-slate-500'}`}
+            >
+              Due {formatDate(order.dueDate)} · {getDueSummary(order.dueDate)}
+            </p>
+          </div>
         </header>
         <section className="rounded-lg border bg-white p-6 shadow-sm">
           <h2 className="font-semibold">Order summary</h2>
@@ -137,6 +149,7 @@ export function PublicPaymentPage({ token }: { token: string }) {
             <span>Amount due</span>
             <span>{formatMoney(order.amountDueCents, order.currency)}</span>
           </div>
+          <p className="mt-2 text-sm text-slate-500">Enter the amount in {order.currency} units.</p>
         </section>
         {complete ? (
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">

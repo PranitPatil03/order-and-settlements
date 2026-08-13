@@ -15,7 +15,7 @@ import {
   type Order,
   type Payment,
 } from '@/lib/api-client';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatMoney, getDueSummary } from '@/lib/format';
 
 const statusStyles = {
   pending: 'bg-slate-100 text-slate-700',
@@ -116,7 +116,11 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           <div>
             <p className="text-sm font-medium text-muted-foreground">Order detail</p>
             <h1 className="mt-2 text-3xl font-semibold">{order.customer}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Due {formatDate(order.dueDate)}</p>
+            <p
+              className={`mt-2 text-sm ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-muted-foreground'}`}
+            >
+              Due {formatDate(order.dueDate)} · {getDueSummary(order.dueDate)}
+            </p>
           </div>
           <Badge className={statusStyles[order.status]}>{statusLabels[order.status]}</Badge>
         </section>
@@ -149,14 +153,36 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </div>
           </section>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => router.push(`/orders/${order.id}/refunds`)}>
-            Refunds and refund history
-          </Button>
-          <Button variant="outline" onClick={() => router.push(`/orders/${order.id}/audit`)}>
-            Status audit history
-          </Button>
-        </div>
+        <section className="rounded-lg border bg-white shadow-sm">
+          <div className="border-b p-5">
+            <h2 className="font-semibold">Settlement history</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Review refund activity and status transitions from one place.
+            </p>
+          </div>
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="h-auto justify-between px-4 py-5"
+              onClick={() => router.push(`/orders/${order.id}/refunds`)}
+            >
+              <div className="text-left">
+                <p className="font-medium">Refunds</p>
+                <p className="text-sm text-muted-foreground">Record and review refund history.</p>
+              </div>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto justify-between px-4 py-5"
+              onClick={() => router.push(`/orders/${order.id}/audit`)}
+            >
+              <div className="text-left">
+                <p className="font-medium">Audit history</p>
+                <p className="text-sm text-muted-foreground">See order status changes over time.</p>
+              </div>
+            </Button>
+          </div>
+        </section>
         <section className="rounded-lg border bg-white shadow-sm">
           <div className="border-b p-5">
             <h2 className="font-semibold">Customer payment history</h2>

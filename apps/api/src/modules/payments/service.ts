@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { mongoClient } from '../../config/database.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { parseObjectId } from '../../common/utils/object-id.js';
+import { calculateRemainingBalanceCents } from '../../domain/order-status.js';
 import { toOrderResponse } from '../orders/mapper.js';
 import {
   findOrderForPayment,
@@ -99,10 +100,7 @@ export const recordPaymentUseCase = async (
           'Payment exceeds the remaining order balance.',
           409,
           {
-            maximumAllowedCents: Math.max(
-              0,
-              beforeOrder.totalCents + beforeOrder.refundedTotalCents - beforeOrder.grossPaidCents,
-            ),
+            maximumAllowedCents: calculateRemainingBalanceCents(beforeOrder),
             requestedAmountCents: input.amountCents,
           },
         );

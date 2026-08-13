@@ -23,6 +23,13 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
 
   const token = stableSecret(orderId.toHexString(), 'payment-link');
   const accessCode = stableSecret(orderId.toHexString(), 'payment-code').slice(0, 10).toUpperCase();
+  if (order.paymentLinkTokenHash && order.paymentLinkAccessCodeHash && !order.paymentLinkRevokedAt) {
+    return {
+      url: `${env.WEB_ORIGIN}/pay/${token}`,
+      accessCode,
+      createdAt: order.paymentLinkCreatedAt?.toISOString() ?? new Date().toISOString(),
+    };
+  }
   const saved = await savePaymentLink(userId, orderId, hashToken(token), hashToken(accessCode));
 
   if (!saved) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
