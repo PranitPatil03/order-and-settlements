@@ -4,7 +4,7 @@ import { parseObjectId } from '../../common/utils/object-id.js';
 import {
   createOrder,
   findOrderById,
-  findOrders,
+  findOrdersPage,
   findOrdersForExport,
   softDeleteOrder,
   updateOrder,
@@ -35,19 +35,16 @@ export const createOrderUseCase = async (userId: string, input: CreateOrderInput
 };
 
 export const listOrdersUseCase = async (userId: string, input: ListOrdersInput) => {
-  const allOrders = (await findOrders(userId)).map(toOrderResponse);
-  const filteredOrders = input.status
-    ? allOrders.filter((order) => order.status === input.status)
-    : allOrders;
-  const start = (input.page - 1) * input.limit;
+  const { items, total } = await findOrdersPage(userId, input);
+  const orders = items.map(toOrderResponse);
 
   return {
-    items: filteredOrders.slice(start, start + input.limit),
+    items: orders,
     pagination: {
       page: input.page,
       limit: input.limit,
-      total: filteredOrders.length,
-      totalPages: Math.ceil(filteredOrders.length / input.limit),
+      total,
+      totalPages: Math.ceil(total / input.limit),
     },
   };
 };

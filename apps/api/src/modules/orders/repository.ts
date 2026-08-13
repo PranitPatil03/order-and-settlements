@@ -1,8 +1,9 @@
 import { ObjectId } from 'mongodb';
 
 import { database } from '../../config/database.js';
+import type { OrderStatus } from '@orders-and-settlements/shared';
 import { ensureOrdersCollection } from '../../config/mongo-schema.js';
-import type { CreateOrderInput, UpdateOrderInput } from './schema.js';
+import type { CreateOrderInput, ListOrdersInput, UpdateOrderInput } from './schema.js';
 import type { OrderDocument } from './types.js';
 
 const orders = () => database().collection<OrderDocument>('orders');
@@ -88,8 +89,52 @@ export const revokePaymentLink = async (userId: string, orderId: ObjectId) => {
   );
 };
 
-export const findOrders = async (userId: string) => {
-  return orders().find({ userId, deletedAt: null }).sort({ createdAt: -1 }).toArray();
+const orderStatusExpression = (today: string) => ({
+  $switch: {
+    branches: [
+      {
+        case: {
+          $gte: [{ $subtract: ['$grossPaidCents', '$refundedTotalCents'] }, '$totalCents'],
+        },
+        then: 'paid',
+      },
+      {
+        case: { $lt: ['$dueDate', today] },
+        then: 'overdue',
+      },
+      {
+        case: { $gt: [{ $subtract: ['$grossPaidCents', '$refundedTotalCents'] }, 0] },
+        then: 'partially_paid',
+      },
+    ],
+    default: 'pending',
+  },
+});
+
+export const findOrdersPage = async (userId: string, input: ListOrdersInput) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const pipeline = [
+    { $match: { userId, deletedAt: null } },
+    { $addFields: { derivedStatus: orderStatusExpression(today) } },
+    ...(input.status ? [{ $match: { derivedStatus: input.status as OrderStatus } }] : []),
+    { $sort: { createdAt: -1 } },
+    {
+      $facet: {
+        items: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const [result] = await orders().aggregate<{
+    items: OrderDocument[];
+    total: Array<{ count: number }>;
+  }>(pipeline).toArray();
+
+  return {
+    items: result?.items ?? [],
+    total: result?.total?.[0]?.count ?? 0,
+  };
 };
 
 export const findOrdersForExport = async (userId: string, from?: string, to?: string) => {
