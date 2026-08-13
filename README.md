@@ -91,7 +91,7 @@ If customer self-service payments are added later, they should be a separate flo
 
 ### Customer payment links
 
-An authenticated order owner can call `POST /api/orders/:orderId/payment-link`. The API generates a cryptographically random opaque token and a separate 10-character access code, stores only their SHA-256 hashes, and returns a URL such as `http://localhost:3000/pay/<token>` plus the code. The customer needs both values. Generating a new link invalidates the previous link; `DELETE` revokes the current link.
+An authenticated order owner can call `POST /api/orders/:orderId/payment-link`. The API derives a stable high-entropy opaque token and a separate 10-character access code from the order ID and server secret, stores only their SHA-256 hashes, and returns a URL such as `http://localhost:3000/pay/<token>` plus the code. Repeatedly copying the link returns the same URL and code. `DELETE` revokes the link.
 
 The public page calls:
 
@@ -191,12 +191,12 @@ The payment write is transactional:
 ```text
 validate request
   -> check idempotency key
-  -> atomically increment order.grossPaidCents if it stays <= totalCents
+  -> atomically increment order.grossPaidCents if gross paid remains <= total plus refunded amount
   -> insert immutable payment document
   -> commit transaction
 ```
 
-If the balance condition fails, the transaction is aborted and the API returns `409 PAYMENT_EXCEEDS_BALANCE` with `maximumAllowedCents`. Repeating the same request with the same idempotency key returns the original payment instead of creating a duplicate. Reusing that key for another order is rejected.
+If the balance condition fails, the transaction is aborted and the API returns `409 PAYMENT_EXCEEDS_BALANCE` with `maximumAllowedCents`. After a refund, the refunded amount becomes available for a later customer payment, so a `50,000` order paid `25,000`, refunded `5,000`, can accept a further `30,000` payment. Repeating the same request with the same idempotency key returns the original payment instead of creating a duplicate. Reusing that key for another order is rejected.
 
 Payment documents are stored separately:
 

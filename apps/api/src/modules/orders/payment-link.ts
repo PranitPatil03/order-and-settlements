@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import { env } from '../../config/environment.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -12,6 +12,8 @@ import {
 } from './repository.js';
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+const stableSecret = (orderId: string, purpose: string) =>
+  createHmac('sha256', env.BETTER_AUTH_SECRET).update(`${purpose}:${orderId}`).digest('base64url');
 
 export const createPaymentLinkUseCase = async (userId: string, orderIdValue: string) => {
   const orderId = parseObjectId(orderIdValue, 'orderId');
@@ -19,8 +21,8 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
 
   if (!order) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
 
-  const token = randomBytes(32).toString('base64url');
-  const accessCode = randomBytes(5).toString('hex').toUpperCase();
+  const token = stableSecret(orderId.toHexString(), 'payment-link');
+  const accessCode = stableSecret(orderId.toHexString(), 'payment-code').slice(0, 10).toUpperCase();
   const saved = await savePaymentLink(userId, orderId, hashToken(token), hashToken(accessCode));
 
   if (!saved) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);

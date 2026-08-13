@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { getPublicOrder, payPublicOrder, type Order, type Payment } from '@/lib/api-client';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatMoney, getDueSummary } from '@/lib/format';
 
 export function PublicPaymentPage({ token }: { token: string }) {
   const [accessCode, setAccessCode] = useState('');
@@ -112,7 +112,11 @@ export function PublicPaymentPage({ token }: { token: string }) {
         <header>
           <p className="text-sm font-medium text-slate-500">CrossVal payment link</p>
           <h1 className="mt-2 text-3xl font-semibold">Payment for {order.customer}</h1>
-          <p className="mt-2 text-sm text-slate-500">Due {formatDate(order.dueDate)}</p>
+          <p
+            className={`mt-2 text-sm ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-slate-500'}`}
+          >
+            Due {formatDate(order.dueDate)} · {getDueSummary(order.dueDate)}
+          </p>
         </header>
         <section className="rounded-lg border bg-white p-6 shadow-sm">
           <h2 className="font-semibold">Order summary</h2>

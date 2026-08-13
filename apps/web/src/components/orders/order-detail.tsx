@@ -1,27 +1,19 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, CircleDollarSign, Copy, LoaderCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { authClient } from '@/lib/auth-client';
 import {
   createPaymentLink,
-  getAuditLogs,
   getOrder,
   getPayments,
-  getRefunds,
-  recordRefund,
-  type AuditLog,
   type Order,
   type Payment,
-  type Refund,
 } from '@/lib/api-client';
 import { formatDate, formatMoney } from '@/lib/format';
 
@@ -44,15 +36,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const session = authClient.useSession();
   const [order, setOrder] = useState<Order | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [refunds, setRefunds] = useState<Refund[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [paymentLink, setPaymentLink] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
-  const [refundAmount, setRefundAmount] = useState('');
-  const [refundNote, setRefundNote] = useState('');
-  const [isRefunding, setIsRefunding] = useState(false);
 
   useEffect(() => {
     if (!session.isPending && !session.data) router.replace('/login');
@@ -62,16 +49,12 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     if (!session.data) return;
     const load = async () => {
       try {
-        const [loadedOrder, loadedPayments, loadedRefunds, loadedAuditLogs] = await Promise.all([
+        const [loadedOrder, loadedPayments] = await Promise.all([
           getOrder(orderId),
           getPayments(orderId),
-          getRefunds(orderId),
-          getAuditLogs(orderId),
         ]);
         setOrder(loadedOrder);
         setPayments(loadedPayments);
-        setRefunds(loadedRefunds);
-        setAuditLogs(loadedAuditLogs);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Unable to load order.');
       } finally {
@@ -94,29 +77,6 @@ export function OrderDetail({ orderId }: { orderId: string }) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
       setIsCreatingLink(false);
-    }
-  };
-
-  const submitRefund = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!order) return;
-    setIsRefunding(true);
-    setErrorMessage('');
-    try {
-      const result = await recordRefund(order.id, {
-        amountCents: Math.round(Number(refundAmount) * 100),
-        refundedAt: new Date().toISOString(),
-        note: refundNote.trim() || undefined,
-      });
-      setOrder(result.order);
-      setRefunds(await getRefunds(order.id));
-      setAuditLogs(await getAuditLogs(order.id));
-      setRefundAmount('');
-      setRefundNote('');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to record refund.');
-    } finally {
-      setIsRefunding(false);
     }
   };
 
@@ -189,6 +149,14 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </div>
           </section>
         </div>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={() => router.push(`/orders/${order.id}/refunds`)}>
+            Refunds and refund history
+          </Button>
+          <Button variant="outline" onClick={() => router.push(`/orders/${order.id}/audit`)}>
+            Status audit history
+          </Button>
+        </div>
         <section className="rounded-lg border bg-white shadow-sm">
           <div className="border-b p-5">
             <h2 className="font-semibold">Customer payment history</h2>
@@ -214,92 +182,6 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                     </p>
                   </div>
                   <CircleDollarSign className="size-5 text-emerald-600" aria-hidden="true" />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-          <section className="rounded-lg border bg-white p-5 shadow-sm">
-            <h2 className="font-semibold">Record refund</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Available:{' '}
-              {formatMoney(
-                Math.max(0, order.grossPaidCents - order.refundedTotalCents),
-                order.currency,
-              )}
-            </p>
-            <form className="mt-5 space-y-4" onSubmit={submitRefund}>
-              <div className="space-y-2">
-                <Label htmlFor="refund-amount">Amount refunded</Label>
-                <Input
-                  id="refund-amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  max={((order.grossPaidCents - order.refundedTotalCents) / 100).toFixed(2)}
-                  value={refundAmount}
-                  onChange={(event) => setRefundAmount(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="refund-note">Note</Label>
-                <Textarea
-                  id="refund-note"
-                  value={refundNote}
-                  onChange={(event) => setRefundNote(event.target.value)}
-                  placeholder="Optional refund note"
-                />
-              </div>
-              <Button className="w-full" disabled={isRefunding}>
-                {isRefunding ? 'Recording...' : 'Record refund'}
-              </Button>
-            </form>
-          </section>
-          <section className="rounded-lg border bg-white shadow-sm">
-            <div className="border-b p-5">
-              <h2 className="font-semibold">Refund history</h2>
-            </div>
-            {refunds.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground">No refunds recorded.</p>
-            ) : (
-              <div className="divide-y">
-                {refunds.map((refund) => (
-                  <div className="flex justify-between gap-4 p-5" key={refund.id}>
-                    <div>
-                      <p className="font-medium">
-                        {formatMoney(refund.amountCents, order.currency)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(refund.refundedAt)}
-                        {refund.note ? ` · ${refund.note}` : ''}
-                      </p>
-                    </div>
-                    <span className="text-sm text-rose-700">Refunded</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </section>
-        <section className="rounded-lg border bg-white shadow-sm">
-          <div className="border-b p-5">
-            <h2 className="font-semibold">Status audit history</h2>
-          </div>
-          {auditLogs.length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">No status changes recorded.</p>
-          ) : (
-            <div className="divide-y">
-              {auditLogs.map((log) => (
-                <div className="flex justify-between gap-4 p-5" key={log.id}>
-                  <div>
-                    <p className="font-medium">
-                      {log.fromStatus ?? 'Created'} -&gt; {log.toStatus}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{formatDate(log.occurredAt)}</p>
-                  </div>
-                  <span className="text-sm text-muted-foreground">Status change</span>
                 </div>
               ))}
             </div>

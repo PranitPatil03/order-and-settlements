@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
 import { downloadOrdersCsv, getOrders, type Order, type OrderStatus } from '@/lib/api-client';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatMoney, getDueSummary } from '@/lib/format';
 
 const statusStyles: Record<OrderStatus, string> = {
   pending: 'bg-slate-100 text-slate-700',
@@ -200,7 +200,12 @@ function OrderTable({ orders }: { orders: Order[] }) {
               <td className="px-5 py-4 font-medium">
                 {formatMoney(order.amountDueCents, order.currency)}
               </td>
-              <td className="px-5 py-4 text-muted-foreground">{formatDate(order.dueDate)}</td>
+              <td
+                className={`px-5 py-4 ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-muted-foreground'}`}
+              >
+                <div>{formatDate(order.dueDate)}</div>
+                <div className="text-xs">{getDueSummary(order.dueDate)}</div>
+              </td>
               <td className="px-5 py-4 text-right">
                 <Link
                   className="inline-flex items-center gap-1 font-medium text-primary hover:underline"

@@ -99,7 +99,10 @@ export const recordPaymentUseCase = async (
           'Payment exceeds the remaining order balance.',
           409,
           {
-            maximumAllowedCents: Math.max(0, beforeOrder.totalCents - beforeOrder.grossPaidCents),
+            maximumAllowedCents: Math.max(
+              0,
+              beforeOrder.totalCents + beforeOrder.refundedTotalCents - beforeOrder.grossPaidCents,
+            ),
             requestedAmountCents: input.amountCents,
           },
         );

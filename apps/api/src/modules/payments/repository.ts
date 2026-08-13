@@ -52,7 +52,10 @@ export const incrementOrderPaidTotal = async (
       userId,
       deletedAt: null,
       $expr: {
-        $lte: [{ $add: ['$grossPaidCents', amountCents] }, '$totalCents'],
+        $lte: [
+          { $add: ['$grossPaidCents', amountCents] },
+          { $add: ['$totalCents', '$refundedTotalCents'] },
+        ],
       },
     },
     { $inc: { grossPaidCents: amountCents }, $set: { updatedAt: new Date() } },
