@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { ArrowLeft, LoaderCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AppHeader } from '@/components/layout/app-header';
+import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,9 +58,8 @@ export function RefundHistory({ orderId }: { orderId: string }) {
   };
   if (session.isPending || loading) return <Loading />;
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <AppHeader userName={session.data?.user.name} />
-      <div className="mx-auto max-w-5xl space-y-6 px-6 py-8 lg:px-8">
+    <AppShell userName={session.data?.user.name} userEmail={session.data?.user.email}>
+      <div className="mx-auto max-w-[1180px] space-y-6">
         <Button variant="outline" onClick={() => router.push(`/orders/${orderId}`)}>
           <ArrowLeft className="size-4" /> Back to order
         </Button>
@@ -69,75 +68,109 @@ export function RefundHistory({ orderId }: { orderId: string }) {
             {error}
           </p>
         ) : null}
-        <h1 className="text-3xl font-semibold">Refunds for {order?.customer}</h1>
+        <div>
+          <p className="text-sm font-semibold text-[#0b6b45]">Orders / Refunds</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+            Refunds for {order?.customer}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">Every refund recorded against this order.</p>
+        </div>
         {order ? (
-          <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-            <section className="rounded-lg border bg-white p-5 shadow-sm">
-              <h2 className="font-semibold">Record refund</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Available:{' '}
-                {formatMoney(
+          <>
+            <section className="grid gap-3 sm:grid-cols-3">
+              <RefundMetric
+                label="Order total"
+                value={formatMoney(order.totalCents, order.currency)}
+              />
+              <RefundMetric
+                label="Total refunded"
+                value={formatMoney(order.refundedTotalCents, order.currency)}
+              />
+              <RefundMetric
+                label="Refundable"
+                value={formatMoney(
                   Math.max(0, order.grossPaidCents - order.refundedTotalCents),
                   order.currency,
                 )}
-              </p>
-              <form className="mt-5 space-y-4" onSubmit={submit}>
-                <div className="space-y-2">
-                  <Label htmlFor="refund-amount">Amount refunded</Label>
-                  <Input
-                    id="refund-amount"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    max={((order.grossPaidCents - order.refundedTotalCents) / 100).toFixed(2)}
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="refund-note">Note</Label>
-                  <Textarea
-                    id="refund-note"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Optional refund note"
-                  />
-                </div>
-                <Button className="w-full" disabled={saving}>
-                  {saving ? 'Recording...' : 'Record refund'}
-                </Button>
-              </form>
+              />
             </section>
-            <section className="rounded-lg border bg-white shadow-sm">
-              <div className="border-b p-5">
-                <h2 className="font-semibold">Refund history</h2>
-              </div>
-              {refunds.length === 0 ? (
-                <p className="p-5 text-sm text-muted-foreground">No refunds recorded.</p>
-              ) : (
-                <div className="divide-y">
-                  {refunds.map((refund) => (
-                    <div className="flex justify-between gap-4 p-5" key={refund.id}>
-                      <div>
-                        <p className="font-medium">
-                          {formatMoney(refund.amountCents, order.currency)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(refund.refundedAt)}
-                          {refund.note ? ` · ${refund.note}` : ''}
-                        </p>
+            <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+              <section className="rounded-2xl border border-slate-300 bg-white p-5">
+                <h2 className="font-semibold">Record refund</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Available:{' '}
+                  {formatMoney(
+                    Math.max(0, order.grossPaidCents - order.refundedTotalCents),
+                    order.currency,
+                  )}
+                </p>
+                <form className="mt-5 space-y-4" onSubmit={submit}>
+                  <div className="space-y-2">
+                    <Label htmlFor="refund-amount">Amount refunded</Label>
+                    <Input
+                      id="refund-amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      max={((order.grossPaidCents - order.refundedTotalCents) / 100).toFixed(2)}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="refund-note">Note</Label>
+                    <Textarea
+                      id="refund-note"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Optional refund note"
+                    />
+                  </div>
+                  <Button className="w-full" disabled={saving}>
+                    {saving ? 'Recording...' : 'Record refund'}
+                  </Button>
+                </form>
+              </section>
+              <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+                <div className="border-b p-5">
+                  <h2 className="font-semibold">Refund history</h2>
+                </div>
+                {refunds.length === 0 ? (
+                  <p className="p-5 text-sm text-muted-foreground">No refunds recorded.</p>
+                ) : (
+                  <div className="divide-y">
+                    {refunds.map((refund) => (
+                      <div className="flex justify-between gap-4 p-5" key={refund.id}>
+                        <div>
+                          <p className="font-medium">
+                            {formatMoney(refund.amountCents, order.currency)}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(refund.refundedAt)}
+                            {refund.note ? ` · ${refund.note}` : ''}
+                          </p>
+                        </div>
+                        <span className="text-sm text-rose-700">Refunded</span>
                       </div>
-                      <span className="text-sm text-rose-700">Refunded</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </section>
             </section>
-          </section>
+          </>
         ) : null}
       </div>
-    </main>
+    </AppShell>
+  );
+}
+
+function RefundMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-300 bg-white p-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className="mt-3 text-xl font-semibold">{value}</p>
+    </div>
   );
 }
 function Loading() {

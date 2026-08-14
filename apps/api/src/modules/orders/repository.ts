@@ -53,7 +53,15 @@ export const createOrder = async (
     currency: input.currency,
     lineItems,
     subtotalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
-    totalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
+    taxRateBps: input.taxRateBps ?? 0,
+    taxCents: Math.round(
+      (lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) * (input.taxRateBps ?? 0)) /
+        10_000,
+    ),
+    totalCents: Math.round(
+      lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) *
+        (1 + (input.taxRateBps ?? 0) / 10_000),
+    ),
     grossPaidCents: 0,
     refundedTotalCents: 0,
     paymentLinkTokenHash: null,
@@ -130,8 +138,17 @@ const orderStatusExpression = (today: string) => ({
 
 export const findOrdersPage = async (userId: string, input: ListOrdersInput) => {
   const today = new Date().toISOString().slice(0, 10);
+  const query = input.q?.trim();
   const pipeline = [
-    { $match: { userId, deletedAt: null } },
+    {
+      $match: {
+        userId,
+        deletedAt: null,
+        ...(input.customerId ? { customerId: input.customerId } : {}),
+        ...(input.refunded ? { refundedTotalCents: { $gt: 0 } } : {}),
+        ...(query ? { customer: { $regex: query, $options: 'i' } } : {}),
+      },
+    },
     { $addFields: { derivedStatus: orderStatusExpression(today) } },
     ...(input.status ? [{ $match: { derivedStatus: input.status as OrderStatus } }] : []),
     { $sort: { createdAt: -1 } },
@@ -185,7 +202,16 @@ export const updateOrder = async (
       : {
           lineItems,
           subtotalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
-          totalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
+          taxRateBps: input.taxRateBps ?? 0,
+          taxCents: Math.round(
+            (lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) *
+              (input.taxRateBps ?? 0)) /
+              10_000,
+          ),
+          totalCents: Math.round(
+            lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) *
+              (1 + (input.taxRateBps ?? 0) / 10_000),
+          ),
         }),
     updatedAt: new Date(),
   };

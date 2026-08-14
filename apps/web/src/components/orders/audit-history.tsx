@@ -1,9 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, CalendarClock, LoaderCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarClock,
+  CircleDollarSign,
+  FilePlus2,
+  LoaderCircle,
+  RotateCcw,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AppHeader } from '@/components/layout/app-header';
+import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { authClient } from '@/lib/auth-client';
@@ -41,7 +48,12 @@ export function AuditHistory({ orderId }: { orderId: string }) {
   }, [router, session.data, session.isPending]);
   useEffect(() => {
     if (!session.data) return;
-    void Promise.all([getOrder(orderId), getAuditLogs(orderId), getPayments(orderId), getRefunds(orderId)])
+    void Promise.all([
+      getOrder(orderId),
+      getAuditLogs(orderId),
+      getPayments(orderId),
+      getRefunds(orderId),
+    ])
       .then(([loadedOrder, loadedLogs, loadedPayments, loadedRefunds]) => {
         setOrder(loadedOrder);
         setLogs(loadedLogs);
@@ -58,35 +70,49 @@ export function AuditHistory({ orderId }: { orderId: string }) {
       </main>
     );
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <AppHeader userName={session.data?.user.name} />
-      <div className="mx-auto max-w-5xl space-y-6 px-6 py-8 lg:px-8">
+    <AppShell userName={session.data?.user.name} userEmail={session.data?.user.email}>
+      <div className="mx-auto max-w-[1180px] space-y-6">
         <Button variant="outline" onClick={() => router.push(`/orders/${orderId}`)}>
           <ArrowLeft className="size-4" /> Back to order
         </Button>
-        <section className="rounded-lg border bg-white p-6 shadow-sm">
+        <section className="rounded-2xl border border-slate-300 bg-white p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Order lifecycle</p>
               <h1 className="mt-2 text-3xl font-semibold">{order?.customer}</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Created {order ? formatDateTime(order.createdAt) : ''} · Due {order ? formatDate(order.dueDate) : ''} · {order ? getDueSummary(order.dueDate) : ''}
+                Created {order ? formatDateTime(order.createdAt) : ''} · Due{' '}
+                {order ? formatDate(order.dueDate) : ''} ·{' '}
+                {order ? getDueSummary(order.dueDate) : ''}
               </p>
             </div>
-            {order ? <Badge className={order.status === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'}>{order.status}</Badge> : null}
+            {order ? (
+              <Badge
+                className={
+                  order.status === 'overdue'
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-slate-100 text-slate-700'
+                }
+              >
+                {order.status}
+              </Badge>
+            ) : null}
           </div>
           {order ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <MetaCard label="Total" value={formatMoney(order.totalCents, order.currency)} />
               <MetaCard label="Paid" value={formatMoney(order.grossPaidCents, order.currency)} />
-              <MetaCard label="Refunded" value={formatMoney(order.refundedTotalCents, order.currency)} />
+              <MetaCard
+                label="Refunded"
+                value={formatMoney(order.refundedTotalCents, order.currency)}
+              />
             </div>
           ) : null}
         </section>
         {error ? (
           <p className="text-sm text-red-700">{error}</p>
         ) : (
-          <section className="rounded-lg border bg-white shadow-sm">
+          <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
             <div className="flex items-center justify-between border-b p-5">
               <div>
                 <h2 className="font-semibold">Lifecycle timeline</h2>
@@ -101,12 +127,18 @@ export function AuditHistory({ orderId }: { orderId: string }) {
             ) : (
               <div className="divide-y">
                 {buildTimeline(order, logs, payments, refunds).map((event) => (
-                  <div className="flex flex-col gap-2 p-5 sm:flex-row sm:items-start sm:justify-between" key={event.id}>
+                  <div
+                    className="flex gap-4 border-b border-slate-200 p-5 last:border-0"
+                    key={event.id}
+                  >
+                    <EventMarker kind={event.kind} />
                     <div>
-                      <p className="font-medium">{event.title}</p>
+                      <p className="font-semibold">{event.title}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{event.subtitle}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{formatDateTime(event.timestamp)}</p>
+                    <p className="ml-auto whitespace-nowrap text-sm text-muted-foreground">
+                      {formatDateTime(event.timestamp)}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -114,7 +146,16 @@ export function AuditHistory({ orderId }: { orderId: string }) {
           </section>
         )}
       </div>
-    </main>
+    </AppShell>
+  );
+}
+
+function EventMarker({ kind }: { kind: TimelineEvent['kind'] }) {
+  const Icon = kind === 'created' ? FilePlus2 : kind === 'refund' ? RotateCcw : CircleDollarSign;
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#e6f4eb] text-[#0b6b45]">
+      <Icon className="size-4" aria-hidden="true" />
+    </span>
   );
 }
 
@@ -157,7 +198,9 @@ function buildTimeline(
     })),
   ];
 
-  return events.sort((left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime());
+  return events.sort(
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+  );
 }
 
 function MetaCard({ label, value }: { label: string; value: string }) {

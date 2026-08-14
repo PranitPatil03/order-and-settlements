@@ -11,6 +11,8 @@ export type OrderDocument = {
   currency: string;
   lineItems: CalculatedLineItem[];
   subtotalCents: number;
+  taxRateBps?: number;
+  taxCents?: number;
   totalCents: number;
   grossPaidCents: number;
   refundedTotalCents: number;
@@ -31,6 +33,8 @@ export type OrderResponse = {
   currency: string;
   lineItems: CalculatedLineItem[];
   subtotalCents: number;
+  taxRateBps: number;
+  taxCents: number;
   totalCents: number;
   grossPaidCents: number;
   refundedTotalCents: number;

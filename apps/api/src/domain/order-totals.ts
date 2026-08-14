@@ -8,7 +8,7 @@ export type CalculatedLineItem = LineItemInput & {
   lineTotalCents: number;
 };
 
-export const calculateOrderTotals = (lineItems: LineItemInput[]) => {
+export const calculateOrderTotals = (lineItems: LineItemInput[], taxRateBps = 0) => {
   const calculatedLineItems: CalculatedLineItem[] = lineItems.map((lineItem) => ({
     ...lineItem,
     lineTotalCents: lineItem.quantity * lineItem.unitPriceCents,
@@ -18,10 +18,13 @@ export const calculateOrderTotals = (lineItems: LineItemInput[]) => {
     (total, lineItem) => total + lineItem.lineTotalCents,
     0,
   );
+  const taxCents = Math.round((subtotalCents * taxRateBps) / 10_000);
 
   return {
     lineItems: calculatedLineItems,
     subtotalCents,
-    totalCents: subtotalCents,
+    taxRateBps,
+    taxCents,
+    totalCents: subtotalCents + taxCents,
   };
 };

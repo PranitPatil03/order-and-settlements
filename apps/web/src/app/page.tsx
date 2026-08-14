@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { AuthForm } from '@/components/auth/auth-form';
 
 export default function HomePage() {
-  redirect('/orders');
+  return <AuthForm mode="sign-in" landing />;
 }

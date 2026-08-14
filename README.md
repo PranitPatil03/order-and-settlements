@@ -1,95 +1,275 @@
-# Orders and Settlements
+# CrossVal
 
-Monorepo for the CrossVal orders and settlements take-home assignment.
+CrossVal is a focused order-operations workspace for creating customer orders, tracking balances, collecting payments, and keeping a clear audit trail.
 
-## Workspace
+The project is implemented as a pnpm monorepo with a Next.js frontend, an Express REST API, MongoDB persistence, Stripe Checkout, and Resend email delivery.
 
-- `apps/api`: Express and TypeScript REST API.
-- `apps/web`: Next.js frontend using shadcn/ui.
-- `packages/shared`: Shared schemas and types.
+## Contents
 
-Copy `apps/api/.env.example` to `apps/api/.env` and `apps/web/.env.example` to `apps/web/.env.local` before starting the apps. The web app's `NEXT_PUBLIC_API_URL` must point to the Express API (`http://localhost:4000`), because Better Auth is mounted by Express rather than Next.js.
+- [Product overview](#product-overview)
+- [Requirements](#requirements)
+- [Repository structure](#repository-structure)
+- [Local setup](#local-setup)
+- [Environment variables](#environment-variables)
+- [Running the project](#running-the-project)
+- [Core workflows](#core-workflows)
+- [Business rules](#business-rules)
+- [API overview](#api-overview)
+- [Stripe and webhook setup](#stripe-and-webhook-setup)
+- [Email delivery](#email-delivery)
+- [Testing and validation](#testing-and-validation)
+- [Deployment](#deployment)
+- [Architecture decisions](#architecture-decisions)
+- [Known limitations and production improvements](#known-limitations-and-production-improvements)
 
-For local development, set `MONGODB_URI` to your MongoDB Atlas connection string and set `MONGODB_DB_NAME` to `orders_and_settlements`. Database credentials belong only in the ignored `apps/api/.env` file and must never be committed.
+## Product overview
 
-With pnpm 11, native dependency build scripts are explicitly allowlisted in `pnpm-workspace.yaml`. This project allows `esbuild` and `sharp`, which are required by the Next.js toolchain.
+CrossVal supports the complete order-to-payment workflow:
+
+1. An authenticated operator creates an order.
+2. The order contains a customer, due date, and one or more line items.
+3. The server calculates each line total and the order total.
+4. The operator can create a public payment link.
+5. The customer opens the link and pays through Stripe Checkout.
+6. Stripe confirms the payment through a signed webhook.
+7. CrossVal records the payment, updates the balance and status, and sends a confirmation email.
+8. Operators can review payments, refunds, status changes, and audit history.
+
+The root route (`/`) is an authentication-first landing page. Workspace routes require an authenticated session. Public payment links are intentionally separate from the operator workspace.
 
 ## Requirements
 
-- Node.js 22 LTS or newer within the supported range.
-- pnpm 11.
+- Node.js 22 LTS or a supported Node version in the range `>=22 <25`.
+- pnpm 10 or newer.
+- MongoDB, either locally or through MongoDB Atlas.
+- A Stripe account and API keys for payment checkout.
+- A Resend account and verified sender domain for email delivery.
 
-## Testing
+## Repository structure
 
-Run the full API test suite with:
-
-```bash
-pnpm --filter @orders-and-settlements/api test
+```text
+CrossVal/
+├── apps/
+│   ├── api/                  # Express API and MongoDB access
+│   │   └── src/
+│   │       ├── auth/         # Better Auth integration and middleware
+│   │       ├── common/       # Errors, logging, middleware, utilities
+│   │       ├── config/       # Environment, CORS, database, validators
+│   │       ├── domain/       # Pure order totals and status rules
+│   │       ├── modules/      # Customers, orders, payments, refunds, audit
+│   │       └── services/     # Stripe and email integrations
+│   └── web/                  # Next.js App Router frontend
+│       └── src/
+│           ├── app/          # Routes and page entry points
+│           ├── components/   # Shared shell, auth, orders, payment UI
+│           └── lib/          # API client, auth client, formatting helpers
+├── packages/
+│   └── shared/               # Shared workspace package
+├── railway.toml              # Railway API deployment configuration
+├── vercel.json               # Vercel frontend deployment configuration
+└── pnpm-workspace.yaml
 ```
 
-Run type checking for the full workspace with:
+## Local setup
 
-```bash
-pnpm typecheck
-```
-
-The current backend tests cover:
-
-- Order total and status derivation.
-- Remaining-balance calculations after refunds.
-- Payment-link token and access-code generation.
-- Public payment-link access-code validation.
-- Order edit/delete locking after financial activity.
-
-There is no browser E2E suite in the repository; the frontend is verified by typecheck and manual route smoke testing.
-
-## Commands
+### 1. Install dependencies
 
 ```bash
 pnpm install
+```
+
+### 2. Configure the API
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Set the values in `apps/api/.env`. Never commit this file or expose its secrets in the frontend.
+
+### 3. Configure the frontend
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+```
+
+For local development, the frontend should point to the API at `http://localhost:4000`.
+
+### 4. Start both applications
+
+```bash
 pnpm dev
+```
+
+The default local URLs are:
+
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:4000`
+- API health check: `http://localhost:4000/health`
+
+## Environment variables
+
+### API: `apps/api/.env`
+
+| Variable                | Required    | Description                                                                    |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------ |
+| `NODE_ENV`              | Yes         | `development`, `test`, or `production`.                                        |
+| `PORT`                  | Yes         | API port, normally `4000`.                                                     |
+| `MONGODB_URI`           | Yes         | MongoDB connection string.                                                     |
+| `MONGODB_DB_NAME`       | Yes         | Database name, normally `orders_and_settlements`.                              |
+| `BETTER_AUTH_SECRET`    | Yes         | Random secret with at least 32 characters.                                     |
+| `BETTER_AUTH_URL`       | Yes         | Public API/auth origin.                                                        |
+| `WEB_ORIGIN`            | Yes         | Frontend origin allowed by CORS and auth.                                      |
+| `PUBLIC_APP_URL`        | Recommended | Public frontend URL used in Stripe redirect links. Falls back to `WEB_ORIGIN`. |
+| `STRIPE_SECRET_KEY`     | For Stripe  | Server-only Stripe secret key, normally `sk_test_...` or `sk_live_...`.        |
+| `STRIPE_WEBHOOK_SECRET` | For Stripe  | Signing secret from Stripe CLI or Dashboard, normally `whsec_...`.             |
+| `RESEND_API_KEY`        | For email   | Resend API key.                                                                |
+| `RESEND_FROM_EMAIL`     | For email   | Verified sender address.                                                       |
+| `APP_NAME`              | Yes         | Application name used in email templates.                                      |
+| `DEFAULT_CURRENCY`      | Yes         | Default three-letter currency code, normally `USD`.                            |
+
+### Frontend: `apps/web/.env.local`
+
+| Variable                             | Required | Description                                                                          |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`                | Yes      | Express API URL, for example `http://localhost:4000`.                                |
+| `NEXT_PUBLIC_APP_URL`                | Optional | Frontend URL used by client-side configuration.                                      |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Optional | Reserved for client-side Stripe integrations. Checkout currently starts server-side. |
+
+## Running the project
+
+```bash
+# Start development servers
+pnpm dev
+
+# Build all packages
 pnpm build
+
+# Typecheck all packages
 pnpm typecheck
+
+# Check formatting
 pnpm format:check
+
+# Format the repository
+pnpm format
 ```
 
-The API runs on `http://localhost:4000` and the web app runs on the Next.js development port. Restart the dev server after changing `NEXT_PUBLIC_API_URL`, because Next.js bundles public environment variables at startup.
+The API and frontend can also be run independently:
 
-## Deployment
+```bash
+pnpm --filter @orders-and-settlements/api dev
+pnpm --filter @orders-and-settlements/web dev
+```
 
-The repository includes `railway.toml` for the Express API and `vercel.json` for the Next.js frontend.
+## Core workflows
 
-### Railway API
+### Authentication
 
-Create a Railway service from this repository and set these variables:
+CrossVal uses Better Auth with email and password authentication. Auth routes are handled by the Express API, while the frontend uses the Better Auth React client with cookie credentials.
+
+- `/` - authentication-first landing page
+- `/login` - sign in
+- `/signup` - create an account
+- `/orders` and other workspace routes - authenticated only
+
+Every authenticated API request is scoped to the current user. A user cannot read or modify another user's customers, orders, payments, refunds, or audit logs.
+
+### Creating an order
+
+An order includes:
+
+- Customer name or saved customer ID
+- Currency
+- Due date
+- One or more line items
+
+Each line item includes a description, quantity, and unit price. The server calculates `lineTotalCents`, `subtotalCents`, and `totalCents`; clients do not control the final totals.
+
+### Taking payment
+
+Operators can record internal payments through the authenticated payments endpoint. Public customers use Stripe Checkout through a payment link. A public payment is not considered complete when Checkout opens; the signed Stripe webhook is the source of truth.
+
+Large orders may require multiple Stripe Checkout payments because Stripe enforces a per-transaction amount limit. CrossVal prevents a request above the configured safe checkout limit and explains that the balance can be paid in multiple payments.
+
+### Refunds and audit history
+
+Refunds are stored as separate records and reduce the order's net paid amount. Status changes are written to the audit log with timestamps. The order detail screen links to payment history, refund history, and the lifecycle audit view.
+
+## Business rules
+
+### Totals
 
 ```text
-NODE_ENV=production
-PORT=4000
-MONGODB_URI=<MongoDB Atlas connection string>
-MONGODB_DB_NAME=orders_and_settlements
-BETTER_AUTH_SECRET=<random secret of at least 32 characters>
-BETTER_AUTH_URL=https://<railway-api-domain>
-WEB_ORIGIN=https://<vercel-frontend-domain>
+line total = quantity × unit price
+subtotal = sum of all line totals
+order total = subtotal
+amount due = max(order total - (gross paid - refunds), 0)
 ```
 
-Railway uses the repository `railway.toml`, builds the API package, starts `dist/server.js`, and checks `/health`.
+All monetary values are stored as integer cents (or the smallest currency unit).
 
-### Vercel frontend
+### Status derivation
 
-Import the same repository into Vercel and set:
+| Status           | Rule                                                            |
+| ---------------- | --------------------------------------------------------------- |
+| `pending`        | Net paid amount is zero and the order is not overdue.           |
+| `partially_paid` | Net paid amount is greater than zero but below the order total. |
+| `paid`           | Net paid amount is greater than or equal to the order total.    |
+| `overdue`        | The due date has passed and the order is not fully paid.        |
+
+An overdue order becomes `paid` as soon as its net paid amount reaches the order total. A paid order remains paid even if its original due date has passed.
+
+### Payment validation
+
+- Payment amounts must be positive.
+- A payment cannot exceed the current remaining balance.
+- Multiple payments are allowed.
+- Payment writes use MongoDB transactions and idempotency keys.
+- A duplicate request with the same idempotency key returns the original payment instead of creating a second record.
+
+### Edit and delete policy
+
+Orders become financially read-only after their first payment or refund. Line items and totals cannot be changed after financial activity. Orders with financial activity cannot be deleted. This protects historical payment and audit records.
+
+## API overview
+
+All operator endpoints require the Better Auth session cookie unless stated otherwise. Responses use the following shape:
+
+```json
+{
+  "data": {},
+  "error": null
+}
+```
+
+Errors use a consistent shape:
+
+```json
+{
+  "error": {
+    "code": "PAYMENT_EXCEEDS_BALANCE",
+    "message": "Payment exceeds the remaining order balance.",
+    "details": {
+      "maximumAllowedCents": 60000
+    },
+    "requestId": "..."
+  }
+}
+```
+
+### System and auth
 
 ```text
-NEXT_PUBLIC_API_URL=https://<railway-api-domain>
+GET  /health
+GET  /api/me
+POST /api/auth/sign-up/email
+POST /api/auth/sign-in/email
+POST /api/auth/sign-out
 ```
 
-The Vercel project must use the repository root so the workspace lockfile and `vercel.json` are available. After the first deploy, copy the Vercel production URL into Railway's `WEB_ORIGIN`, then redeploy the API. The deployed URL should be added to this README and the submission email.
+Better Auth owns the exact auth request handling and session cookie behavior.
 
-## API foundation
-
-The API uses route, controller, service, domain, and repository layers. Orders are scoped by the authenticated user, line-item totals are calculated on the server, and order status is derived from totals and the UTC due date.
-
-Customer endpoints:
+### Customers
 
 ```text
 GET    /api/customers
@@ -99,7 +279,7 @@ PATCH  /api/customers/:customerId
 DELETE /api/customers/:customerId
 ```
 
-Order endpoints currently include:
+### Orders
 
 ```text
 GET    /api/orders
@@ -107,229 +287,193 @@ POST   /api/orders
 GET    /api/orders/:orderId
 PATCH  /api/orders/:orderId
 DELETE /api/orders/:orderId
+GET    /api/orders/export?from=YYYY-MM-DD&to=YYYY-MM-DD
 POST   /api/orders/:orderId/payment-link
 DELETE /api/orders/:orderId/payment-link
-GET    /api/orders/:orderId/refunds
-POST   /api/orders/:orderId/refunds
-GET    /api/orders/:orderId/audit-logs
-GET    /api/orders/export?from=YYYY-MM-DD&to=YYYY-MM-DD
 ```
 
-Line items and prices become read-only after the first payment or refund. Orders with financial activity cannot be deleted.
-
-### Payment meaning
-
-Payments are settlement records owned by the authenticated user who created the order. That user is the finance operator, not the payer. When an order is created from a saved customer, the order stores both `customerId` and the current customer display name. The customer can pay through the protected public payment link, while internal payment recording remains available for manual back-office settlement.
-
-Public payments use Stripe Checkout. The API creates a card-only Checkout Session and only the verified Stripe webhook records a successful payment.
-
-### Customer payment links
-
-An authenticated order owner can call `POST /api/orders/:orderId/payment-link`. The API derives a stable high-entropy opaque token from the order ID and server secret, stores its SHA-256 hash, and returns a URL such as `http://localhost:3000/pay/<token>`. Repeatedly copying the link returns the same URL. `DELETE` revokes the link.
-
-When an order is created with a saved customer, the backend automatically creates the payment link and attempts to send a payment request email through Resend. Email delivery is intentionally graceful: if Resend is not configured or the email request fails, the order still exists and the error is logged for the operator.
-
-The public page calls:
-
-```text
-GET  /api/public/payment-links/:token
-POST /api/public/payment-links/:token/checkout-session
-```
-
-The public response exposes the customer name, line items, currency, due date, totals, current balance, and payment history for the opaque link. The customer selects a partial or full amount, is redirected to Stripe Checkout, and the page polls for updated payment history every 10 seconds. A verified Stripe webhook records the payment against the order owner's account and sends a confirmation email.
-
-## How the API works
-
-An authenticated request flows through the API in this order:
-
-```text
-HTTP request
-  -> CORS, Helmet, request ID, and structured logging
-  -> Better Auth session middleware
-  -> route and Zod request schema
-  -> controller: HTTP input/output only
-  -> service: use-case orchestration
-  -> domain functions: totals and status rules
-  -> repository: ownership-scoped MongoDB queries
-  -> consistent JSON response
-```
-
-The controller does not calculate money and does not query MongoDB directly. The service validates the use case, calls pure domain functions, and asks the repository to persist data. This keeps financial rules easy to test and prevents HTTP concerns from leaking into the business layer.
-
-Refunds are stored in a separate append-only collection. A refund can never exceed the order's gross paid amount minus previous refunds, and it uses the same idempotency pattern as payments. Status changes caused by payment or refund activity are written to the append-only `audit_logs` collection. CSV export is ownership-scoped and streams the current order summary fields for an optional inclusive date range.
-
-The order detail dashboard links to separate refund and audit sections. Refund history supports creating a simple refund against paid amount. Audit history is read-only; there is no delete or update endpoint for audit records.
-
-Concurrency is handled with transactional payment and refund writes plus atomic balance checks in the repository layer. If two payments race for the same remaining balance, one transaction may fail with `PAYMENT_EXCEEDS_BALANCE` rather than over-allocating funds.
-
-## MongoDB schema
-
-MongoDB is flexible by default, so this project uses two layers of schema protection:
-
-1. Zod validates API input before it reaches the service.
-2. MongoDB creates the `orders` collection with a strict `$jsonSchema` validator in `apps/api/src/config/mongo-schema.ts`.
-
-The collection is created on API startup before indexes are created. The current order document is:
-
-```text
-orders
-├── _id: ObjectId
-├── userId: string
-├── customerId: string | null
-├── customer: string
-├── dueDate: YYYY-MM-DD string
-├── currency: 3-letter string
-├── lineItems: [{ description, quantity, unitPriceCents, lineTotalCents }]
-├── subtotalCents: integer
-├── totalCents: integer
-├── grossPaidCents: integer
-├── refundedTotalCents: integer
-├── deletedAt: Date | null
-├── createdAt: Date
-└── updatedAt: Date
-```
-
-Money is stored as integer cents. For example, `$1,000.50` is `100050`. The server calculates `lineTotalCents`, `subtotalCents`, and `totalCents`; the client cannot override them.
-
-Indexes:
-
-```text
-{ userId: 1, createdAt: -1 }
-{ userId: 1, dueDate: 1 }
-{ userId: 1, customerId: 1, createdAt: -1 }
-{ paymentLinkTokenHash: 1 } unique, partial on string token hashes
-```
-
-The `userId` condition is included in every order repository query, which prevents one authenticated user from reading or modifying another user's data.
-
-The `customers` collection uses a partial unique index on `{ userId, email }` where `deletedAt` is `null`, so one user cannot create two active customers with the same email, while soft-deleted records do not block recreating that contact later.
-
-## Payments
-
-Payment endpoints:
+### Payments, refunds, and audit
 
 ```text
 GET  /api/orders/:orderId/payments
 POST /api/orders/:orderId/payments
+GET  /api/orders/:orderId/refunds
+POST /api/orders/:orderId/refunds
+GET  /api/orders/:orderId/audit-logs
 ```
 
-Recording a payment requires an `Idempotency-Key` header:
-
-```http
-Idempotency-Key: payment-request-unique-id
-```
-
-The request body is:
-
-```json
-{
-  "amountCents": 40000,
-  "paidAt": "2026-08-13T12:00:00.000Z",
-  "note": "Deposit"
-}
-```
-
-The payment write is transactional:
+### Public Stripe payment links
 
 ```text
-validate request
-  -> check idempotency key
-  -> atomically increment order.grossPaidCents if gross paid remains <= total plus refunded amount
-  -> insert immutable payment document
-  -> commit transaction
+GET  /api/public/payment-links/:token
+POST /api/public/payment-links/:token/checkout-session
+POST /api/webhooks/stripe
 ```
 
-If the balance condition fails, the transaction is aborted and the API returns `409 PAYMENT_EXCEEDS_BALANCE` with `maximumAllowedCents`. After a refund, the refunded amount becomes available for a later customer payment, so a `50,000` order paid `25,000`, refunded `5,000`, can accept a further `30,000` payment. Repeating the same request with the same idempotency key returns the original payment instead of creating a duplicate. Reusing that key for another order is rejected.
+The public token is an opaque, deterministic HMAC-derived identifier. The customer-facing link does not expose a separate access-code form. The webhook endpoint validates the Stripe signature before recording `checkout.session.completed` payments.
 
-Payment documents are stored separately:
+## Stripe and webhook setup
+
+### Test mode
+
+1. Create a Stripe test-mode secret key.
+2. Put it in `apps/api/.env` as `STRIPE_SECRET_KEY`.
+3. Start the API.
+4. Authenticate the Stripe CLI:
+
+   ```bash
+   stripe login
+   ```
+
+5. Forward local webhook events:
+
+   ```bash
+   stripe listen --forward-to localhost:4000/api/webhooks/stripe
+   ```
+
+6. Copy the displayed `whsec_...` value into `STRIPE_WEBHOOK_SECRET`.
+7. Restart the API after changing environment variables.
+
+Use Stripe's test card `4242 4242 4242 4242` with any future expiry date and any three-digit CVC.
+
+Do not use an expired CLI API key, and do not confuse `sk_test_...` secret keys with `whsec_...` webhook secrets.
+
+## Email delivery
+
+CrossVal uses Resend when both `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are configured.
+
+Emails include:
+
+- CrossVal brand header
+- Clear subject with the order identifier
+- Customer name
+- Order line items and totals
+- Due date and amount due
+- Secure Stripe payment link
+- Payment amount and updated remaining balance for confirmations
+- Support guidance and application signature
+
+Email failure is logged without rolling back order creation. Payment recording remains authoritative in MongoDB and Stripe webhook retries remain idempotent.
+
+## Testing and validation
+
+Run API tests:
+
+```bash
+pnpm --filter @orders-and-settlements/api test
+```
+
+Run typechecks:
+
+```bash
+pnpm --filter @orders-and-settlements/api typecheck
+pnpm --filter @orders-and-settlements/web typecheck
+```
+
+Current automated coverage includes:
+
+- Order total calculations
+- Pending, partially paid, paid, and overdue status rules
+- Remaining balance after refunds
+- Payment-link token stability
+- Customer schema validation
+- Order edit/delete policies after financial activity
+- Payment overage and idempotency logic through domain/service tests
+
+The frontend should also be manually smoke-tested at `/`, `/login`, `/signup`, `/orders`, `/customers`, `/orders/new`, an order detail route, refund history, audit history, and a public payment link.
+
+## Deployment
+
+The repository includes deployment configuration for Railway and Vercel.
+
+### Railway API
+
+Create a Railway service from the repository root. The included `railway.toml` builds and starts the API package.
+
+Required production variables:
 
 ```text
-payments
-├── _id: ObjectId
-├── userId: string
-├── orderId: ObjectId
-├── amountCents: integer
-├── paidAt: Date
-├── note: string | null
-├── idempotencyKey: string
-└── createdAt: Date
+NODE_ENV=production
+PORT=4000
+MONGODB_URI=<MongoDB Atlas connection string>
+MONGODB_DB_NAME=orders_and_settlements
+BETTER_AUTH_SECRET=<random secret with at least 32 characters>
+BETTER_AUTH_URL=https://<railway-api-domain>
+WEB_ORIGIN=https://<vercel-frontend-domain>
+PUBLIC_APP_URL=https://<vercel-frontend-domain>
+STRIPE_SECRET_KEY=<Stripe live or test secret key>
+STRIPE_WEBHOOK_SECRET=<Stripe webhook signing secret>
+RESEND_API_KEY=<Resend API key>
+RESEND_FROM_EMAIL=<verified sender email>
+APP_NAME=CrossVal
+DEFAULT_CURRENCY=USD
 ```
 
-The `payments` collection has a strict MongoDB validator and these indexes:
+Configure the Stripe webhook destination as:
 
 ```text
-{ userId: 1, orderId: 1, paidAt: -1 }
-{ userId: 1, idempotencyKey: 1 } unique
+https://<railway-api-domain>/api/webhooks/stripe
 ```
 
-## Frontend workflow
+Subscribe at minimum to `checkout.session.completed`.
 
-The web app uses the Better Auth React client with the API origin as its `baseURL`. Authentication requests and normal API requests both include credentials so the Better Auth HTTP-only session cookie is sent to Express. If `NEXT_PUBLIC_API_URL` is missing, the client falls back to `http://localhost:4000` for local development.
+### Vercel frontend
 
-Frontend routes:
+Create the Vercel project from the repository root and configure:
 
 ```text
-/login                  email/password sign in
-/signup                 email/password account creation
-/customers              customer directory and quick order handoff
-/orders                 authenticated dashboard and status filter
-/orders/new             create an order with line items and optional saved customer
-/orders/:orderId        order detail and payment history
-/orders/:orderId/refunds refund creation and refund history
-/orders/:orderId/audit  read-only status audit history
-/pay/:token             customer payment page protected by access code
+NEXT_PUBLIC_API_URL=https://<railway-api-domain>
+NEXT_PUBLIC_APP_URL=https://<vercel-frontend-domain>
 ```
 
-The dashboard loads the authenticated session first. If no session exists, it redirects to `/login`. Once authenticated, it loads orders from `GET /api/orders`, computes dashboard summary values from the server response, and renders status badges using the same four domain statuses as the API.
+After the first deployment, verify that the final Vercel origin is present in the API's `WEB_ORIGIN` and that browser requests include credentials.
 
-Creating an order converts the form's decimal display price to integer cents before calling the API. The user can select an existing customer, quick-create a customer with name/email, or type a one-off customer name. The API remains the source of truth and recalculates all totals. Recording a payment creates a fresh idempotency key in the browser and sends it with `POST /api/orders/:orderId/payments`.
+### Deployment URL
 
-The UI uses shadcn-style primitives and a restrained visual system: neutral surfaces, navy text, one primary blue, and semantic status colors only where status meaning is needed. No frontend Testing Library is included for this assignment; API/domain correctness is verified at the backend boundary and the frontend is verified through typecheck, production build, and route smoke tests.
-
-## Order status
-
-Status is derived rather than stored as the source of truth:
+Add the final public frontend URL here before submitting the project:
 
 ```text
-netPaidCents = grossPaidCents - refundedTotalCents
-amountDueCents = totalCents - netPaidCents
+Production URL: <add deployed frontend URL>
+API URL: <add deployed API URL>
 ```
 
-The priority is:
+## Architecture decisions
 
-```text
-net paid >= total       -> paid
-past UTC due date       -> overdue
-net paid > 0            -> partially_paid
-otherwise               -> pending
-```
+### Server-authoritative money rules
 
-An order that was overdue but is fully paid becomes `paid`. An order with a partial refund can become `partially_paid` or `overdue` again. Due dates are date-only values and are compared in UTC.
+The frontend sends user input, but the API calculates totals, validates balances, and derives status. This prevents clients from changing financial facts through modified requests.
 
-## Order coding example
+### Transactional payment writes
 
-Creating an order follows this path:
+Payment creation increments the order's paid total and inserts the payment record inside a MongoDB transaction. A unique `(userId, idempotencyKey)` index prevents duplicate payment records during retries.
 
-```text
-POST /api/orders
-  -> createOrderSchema.parse(request.body)
-  -> createOrderUseCase(userId, input)
-  -> resolve saved customer when customerId is present
-  -> calculateOrderTotals(lineItems)
-  -> createOrder(userId, calculated values)
-  -> create stable payment link and attempt payment email for saved customers
-  -> toOrderResponse(order)
-```
+### Webhook as payment authority
 
-This pattern will be reused for payments, refunds, audit logs, and CSV exports. Each module will have `routes.ts`, `controller.ts`, `service.ts`, `repository.ts`, `schema.ts`, `mapper.ts`, and `types.ts` where those responsibilities apply.
+Stripe Checkout sessions are not recorded as payments merely because a session was created. Only a verified `checkout.session.completed` webhook records the payment. This avoids marking abandoned or cancelled checkouts as paid.
 
-## Security notes
+### User ownership boundaries
 
-- Better Auth stores sessions in MongoDB and uses HTTP-only cookies.
-- CORS allows only `WEB_ORIGIN` and credentials.
-- Authorization headers and cookies are redacted from Pino logs.
-- Request IDs are returned as `x-request-id` and included in error responses.
-- Environment variables are validated at startup.
-- `.env` files are ignored by git.
+Every repository query includes the authenticated user's ID. Public payment links resolve only the order associated with their opaque token and never expose operator-only workspace data.
 
-The Atlas credential used for local setup was provided in the development conversation. Rotate it in MongoDB Atlas if it has been exposed outside this private environment.
+### Graceful integrations
+
+Stripe and Resend are optional at application startup so the workspace can run for local order-management development. Payment checkout returns a clear configuration error when Stripe is unavailable, and email delivery failures are logged.
+
+## Known limitations and production improvements
+
+Before a larger production rollout, the following improvements would be appropriate:
+
+- Add browser end-to-end tests for authentication, order creation, payment links, and Stripe webhook flows.
+- Add a durable email outbox so a temporary email provider outage can be retried independently.
+- Add webhook event storage for stronger replay and operational visibility.
+- Add pagination and server-side filtering to customer and order list endpoints.
+- Add role-based access control for multiple finance operators.
+- Add rate limiting and abuse protection for public payment-link endpoints.
+- Add stronger observability with metrics, alerting, and structured payment reconciliation reports.
+- Add a production secret manager instead of manually maintained environment variables.
+- Add a supported database migration process for schema evolution.
+- Add a documented live URL and deployment smoke-test checklist to the submission package.
+
+## License
+
+This project is provided as an assignment/demo application. Add the appropriate license before public redistribution.

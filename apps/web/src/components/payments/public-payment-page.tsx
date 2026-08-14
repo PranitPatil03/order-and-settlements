@@ -37,14 +37,15 @@ export function PublicPaymentPage({ token }: { token: string }) {
     const result = await getPublicOrder(token);
     setOrder(result.order);
     setPayments(result.payments);
-    setAmount((current) =>
-      current ||
-      (
-        Math.min(
-          result.order.amountDueCents,
-          getStripeMaximumPaymentCents(result.order.currency),
-        ) / 100
-      ).toFixed(2),
+    setAmount(
+      (current) =>
+        current ||
+        (
+          Math.min(
+            result.order.amountDueCents,
+            getStripeMaximumPaymentCents(result.order.currency),
+          ) / 100
+        ).toFixed(2),
     );
   }, [token]);
 

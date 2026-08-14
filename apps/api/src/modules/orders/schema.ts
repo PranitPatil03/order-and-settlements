@@ -14,6 +14,7 @@ export const createOrderSchema = z
     customer: z.string().trim().min(1).max(200).optional(),
     dueDate: z.iso.date(),
     currency: orderCurrencySchema.default('USD'),
+    taxRateBps: z.number().int().min(0).max(10_000).default(0),
     lineItems: z.array(lineItemSchema).min(1).max(100),
   })
   .refine((value) => Boolean(value.customerId || value.customer), {
@@ -26,9 +27,13 @@ export const updateOrderSchema = z.object({
   customer: z.string().trim().min(1).max(200).optional(),
   dueDate: z.iso.date().optional(),
   lineItems: z.array(lineItemSchema).min(1).max(100).optional(),
+  taxRateBps: z.number().int().min(0).max(10_000).optional(),
 });
 
 export const listOrdersSchema = z.object({
+  q: z.string().trim().optional(),
+  customerId: z.string().trim().optional(),
+  refunded: z.coerce.boolean().optional(),
   status: z.enum(['pending', 'partially_paid', 'paid', 'overdue']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(100),

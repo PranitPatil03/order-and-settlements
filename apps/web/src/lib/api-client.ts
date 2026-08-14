@@ -10,6 +10,13 @@ export type ApiError = {
 
 export type OrderStatus = 'pending' | 'partially_paid' | 'paid' | 'overdue';
 
+export type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 export type LineItem = {
   description: string;
   quantity: number;
@@ -25,6 +32,8 @@ export type Order = {
   currency: string;
   lineItems: LineItem[];
   subtotalCents: number;
+  taxRateBps: number;
+  taxCents: number;
   totalCents: number;
   grossPaidCents: number;
   refundedTotalCents: number;
@@ -98,10 +107,28 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   return payload as T;
 }
 
-export async function getOrders(status?: OrderStatus) {
-  const query = status ? `?status=${encodeURIComponent(status)}` : '';
-  const response = await apiRequest<{ data: { items: Order[] } }>(`/api/orders${query}`);
-  return response.data.items;
+export async function getOrders(
+  input: {
+    status?: OrderStatus;
+    page?: number;
+    limit?: number;
+    q?: string;
+    customerId?: string;
+    refunded?: boolean;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  if (input.status) params.set('status', input.status);
+  if (input.page) params.set('page', String(input.page));
+  if (input.limit) params.set('limit', String(input.limit));
+  if (input.q?.trim()) params.set('q', input.q.trim());
+  if (input.customerId) params.set('customerId', input.customerId);
+  if (input.refunded) params.set('refunded', 'true');
+  const query = params.toString();
+  const response = await apiRequest<{ data: { items: Order[]; pagination: Pagination } }>(
+    `/api/orders${query ? `?${query}` : ''}`,
+  );
+  return response.data;
 }
 
 export async function downloadOrdersCsv() {
@@ -116,9 +143,36 @@ export async function downloadOrdersCsv() {
   URL.revokeObjectURL(url);
 }
 
+export async function getCustomersPage(input: { page?: number; limit?: number; q?: string } = {}) {
+  const params = new URLSearchParams();
+  if (input.page) params.set('page', String(input.page));
+  if (input.limit) params.set('limit', String(input.limit));
+  if (input.q?.trim()) params.set('q', input.q.trim());
+  const query = params.toString();
+  const response = await apiRequest<{ data: { items: Customer[]; pagination: Pagination } }>(
+    `/api/customers${query ? `?${query}` : ''}`,
+  );
+  return response.data;
+}
+
+export async function getCustomer(customerId: string) {
+  const response = await apiRequest<{ data: Customer }>(`/api/customers/${customerId}`);
+  return response.data;
+}
+
+export async function updateCustomer(
+  customerId: string,
+  input: Partial<Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>>,
+) {
+  const response = await apiRequest<{ data: Customer }>(`/api/customers/${customerId}`, {
+    method: 'PATCH',
+    body: input,
+  });
+  return response.data;
+}
+
 export async function getCustomers() {
-  const response = await apiRequest<{ data: { items: Customer[] } }>('/api/customers');
-  return response.data.items;
+  return (await getCustomersPage({ limit: 100 })).items;
 }
 
 export async function createCustomer(input: {
@@ -142,6 +196,7 @@ export async function createOrder(input: {
   customer?: string;
   currency?: string;
   dueDate: string;
+  taxRateBps?: number;
   lineItems: Array<{ description: string; quantity: number; unitPriceCents: number }>;
 }) {
   const response = await apiRequest<{ data: Order }>('/api/orders', {
@@ -199,7 +254,7 @@ export async function recordPayment(
 
 export async function createPaymentLink(orderId: string) {
   const response = await apiRequest<{
-    data: { url: string; accessCode: string; createdAt: string };
+    data: { url: string; createdAt: string };
   }>(`/api/orders/${orderId}/payment-link`, { method: 'POST' });
   return response.data;
 }

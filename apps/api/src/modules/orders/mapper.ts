@@ -16,6 +16,8 @@ export const toOrderResponse = (order: OrderDocument): OrderResponse => {
     currency: order.currency,
     lineItems: order.lineItems,
     subtotalCents: order.subtotalCents,
+    taxRateBps: order.taxRateBps ?? 0,
+    taxCents: order.taxCents ?? Math.max(0, order.totalCents - order.subtotalCents),
     totalCents: order.totalCents,
     grossPaidCents: order.grossPaidCents,
     refundedTotalCents: order.refundedTotalCents,

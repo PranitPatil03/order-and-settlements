@@ -60,7 +60,7 @@ const resolveOrderCustomer = async (
 export const createOrderUseCase = async (userId: string, input: CreateOrderInput) => {
   const customer = await resolveOrderCustomer(userId, input);
 
-  const totals = calculateOrderTotals(input.lineItems);
+  const totals = calculateOrderTotals(input.lineItems, input.taxRateBps);
 
   const order = await createOrder(
     userId,
@@ -79,6 +79,8 @@ export const createOrderUseCase = async (userId: string, input: CreateOrderInput
         currency: order.currency,
         paymentUrl: paymentLink.url,
         customerName: customer.customerName,
+        dueDate: order.dueDate,
+        lineItems: order.lineItems,
       });
     } catch (error) {
       logger.error(
@@ -137,7 +139,10 @@ export const updateOrderUseCase = async (
       ? undefined
       : await resolveOrderCustomer(userId, { customerId: input.customerId });
   const lineItems =
-    input.lineItems === undefined ? undefined : calculateOrderTotals(input.lineItems).lineItems;
+    input.lineItems === undefined
+      ? undefined
+      : calculateOrderTotals(input.lineItems, input.taxRateBps ?? currentOrder.taxRateBps)
+          .lineItems;
   const updatedOrder = await updateOrder(
     userId,
     currentOrder._id,

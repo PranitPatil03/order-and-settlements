@@ -1,5 +1,5 @@
 import { AuthForm } from '@/components/auth/auth-form';
 
 export default function LoginPage() {
-  return <AuthForm mode="sign-in" />;
+  return <AuthForm mode="sign-in" landing />;
 }

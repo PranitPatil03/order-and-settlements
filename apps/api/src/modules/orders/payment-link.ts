@@ -46,7 +46,6 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
   ) {
     return {
       url: paymentLink.url,
-      accessCode: paymentLink.accessCode,
       createdAt: order.paymentLinkCreatedAt?.toISOString() ?? new Date().toISOString(),
     };
   }
@@ -61,7 +60,6 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
 
   return {
     url: paymentLink.url,
-    accessCode: paymentLink.accessCode,
     createdAt: saved.paymentLinkCreatedAt?.toISOString() ?? new Date().toISOString(),
   };
 };

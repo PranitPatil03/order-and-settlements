@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, CircleDollarSign, Copy, LoaderCircle } from 'lucide-react';
+import {
+  Activity,
+  CalendarDays,
+  CircleDollarSign,
+  Copy,
+  CreditCard,
+  LoaderCircle,
+  Mail,
+  UserRound,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { AppShell } from '@/components/layout/app-shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
@@ -38,7 +47,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [paymentLink, setPaymentLink] = useState<{ url: string; accessCode: string } | null>(null);
+  const [paymentLink, setPaymentLink] = useState<{ url: string; createdAt: string } | null>(null);
   const [isCreatingLink, setIsCreatingLink] = useState(false);
 
   useEffect(() => {
@@ -88,15 +97,15 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     );
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <AppHeader userName={session.data?.user.name} />
-      <div className="mx-auto max-w-7xl space-y-8 px-6 py-8 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-white p-3 shadow-sm">
-          <Button variant="outline" onClick={() => router.push('/orders')}>
-            <ArrowLeft className="size-4" aria-hidden="true" />
-            Back to orders
-          </Button>
+    <AppShell userName={session.data?.user.name} userEmail={session.data?.user.email}>
+      <div className="mx-auto max-w-[1240px] space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
+            <Badge className={statusStyles[order.status]}>{statusLabels[order.status]}</Badge>
+            <Button onClick={generatePaymentLink} disabled={isCreatingLink}>
+              <Copy className="size-4" aria-hidden="true" />
+              {isCreatingLink ? 'Creating link...' : 'Generate payment link'}
+            </Button>
             <Button variant="outline" onClick={() => router.push(`/orders/${orderId}/refunds`)}>
               Refunds
             </Button>
@@ -105,95 +114,170 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </Button>
           </div>
         </div>
+        {paymentLink ? <CopyRow label="Payment URL" value={paymentLink.url} /> : null}
         <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">Order detail</p>
-            <h1 className="mt-2 text-3xl font-semibold">{order.customer}</h1>
+            <p className="text-sm font-semibold text-[#0b6b45]">Orders / Detail</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Order #{order.id.slice(0, 8)} · {formatDate(order.createdAt)}
+            </p>
+            {order.customerId ? (
+              <a
+                href={`/customers/${order.customerId}`}
+                className="mt-2 block text-3xl font-semibold hover:text-[#0b6b45] hover:underline"
+              >
+                {order.customer}
+              </a>
+            ) : (
+              <h1 className="mt-2 text-3xl font-semibold">{order.customer}</h1>
+            )}
             <p
               className={`mt-2 text-sm ${order.status === 'overdue' ? 'font-medium text-red-700' : 'text-muted-foreground'}`}
             >
               Due {formatDate(order.dueDate)} · {getDueSummary(order.dueDate)}
             </p>
           </div>
-          <Badge className={statusStyles[order.status]}>{statusLabels[order.status]}</Badge>
         </section>
-        <section className="grid gap-4 sm:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-4">
           <Summary label="Order total" value={formatMoney(order.totalCents, order.currency)} />
           <Summary label="Gross paid" value={formatMoney(order.grossPaidCents, order.currency)} />
           <Summary label="Refunded" value={formatMoney(order.refundedTotalCents, order.currency)} />
           <Summary label="Amount due" value={formatMoney(order.amountDueCents, order.currency)} />
         </section>
-        <div className="grid gap-6">
-          <section className="rounded-lg border bg-white shadow-sm">
-            <div className="border-b p-5">
-              <h2 className="font-semibold">Line items</h2>
-            </div>
-            <div className="divide-y">
-              {order.lineItems.map((item, index) => (
-                <div
-                  className="flex items-center justify-between gap-4 p-5"
-                  key={`${item.description}-${index}`}
-                >
-                  <div>
-                    <p className="font-medium">{item.description}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {item.quantity} × {formatMoney(item.unitPriceCents, order.currency)}
-                    </p>
-                  </div>
-                  <p className="font-medium">{formatMoney(item.lineTotalCents, order.currency)}</p>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-slate-300 bg-white shadow-sm">
+              <div className="border-b p-5">
+                <div className="flex items-center gap-3">
+                  <CircleDollarSign className="size-5 text-[#0b6b45]" />
+                  <h2 className="font-semibold">Order items</h2>
                 </div>
-              ))}
-            </div>
-          </section>
-        </div>
-        <section className="rounded-lg border bg-white shadow-sm">
-          <div className="border-b p-5">
-            <h2 className="font-semibold">Customer payment history</h2>
-          </div>
-          {payments.length === 0 ? (
-            <div className="flex min-h-32 items-center justify-center p-5 text-sm text-muted-foreground">
-              No payments recorded.
-            </div>
-          ) : (
-            <div className="divide-y">
-              {payments.map((payment) => (
-                <div
-                  className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between"
-                  key={payment.id}
-                >
-                  <div>
+              </div>
+              <div className="divide-y">
+                {order.lineItems.map((item, index) => (
+                  <div
+                    className="flex items-center justify-between gap-4 p-5"
+                    key={`${item.description}-${index}`}
+                  >
+                    <div>
+                      <p className="font-medium">{item.description}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {item.quantity} × {formatMoney(item.unitPriceCents, order.currency)}
+                      </p>
+                    </div>
                     <p className="font-medium">
-                      {formatMoney(payment.amountCents, order.currency)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(payment.paidAt)}
-                      {payment.note ? ` · ${payment.note}` : ''}
+                      {formatMoney(item.lineTotalCents, order.currency)}
                     </p>
                   </div>
-                  <CircleDollarSign className="size-5 text-emerald-600" aria-hidden="true" />
+                ))}
+              </div>
+            </section>
+            <section className="rounded-2xl border border-slate-300 bg-white shadow-sm">
+              <div className="border-b p-5">
+                <div className="flex items-center gap-3">
+                  <CreditCard className="size-5 text-[#0b6b45]" />
+                  <h2 className="font-semibold">Payment</h2>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="rounded-lg border bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h2 className="font-semibold">Customer payment link</h2>
-            </div>
-            <Button onClick={generatePaymentLink} disabled={isCreatingLink}>
-              <Copy className="size-4" aria-hidden="true" />
-              {isCreatingLink ? 'Creating link...' : 'Generate payment link'}
-            </Button>
+              </div>
+              <div className="space-y-3 p-5 text-sm">
+                <SummaryRow
+                  label="Subtotal"
+                  value={formatMoney(order.subtotalCents, order.currency)}
+                />
+                <SummaryRow
+                  label="Gross paid"
+                  value={formatMoney(order.grossPaidCents, order.currency)}
+                />
+                <SummaryRow
+                  label="Total refund"
+                  value={formatMoney(order.refundedTotalCents, order.currency)}
+                />
+                <SummaryRow
+                  label="Amount due"
+                  value={formatMoney(order.amountDueCents, order.currency)}
+                  strong
+                />
+              </div>
+            </section>
+            <section className="rounded-2xl border border-slate-300 bg-white shadow-sm">
+              <div className="border-b p-5">
+                <div className="flex items-center gap-3">
+                  <Activity className="size-5 text-[#0b6b45]" />
+                  <h2 className="font-semibold">Transaction details</h2>
+                </div>
+              </div>
+              {payments.length === 0 ? (
+                <div className="flex min-h-32 items-center justify-center p-5 text-sm text-muted-foreground">
+                  No payments recorded.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {payments.map((payment) => (
+                    <div
+                      className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between"
+                      key={payment.id}
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {formatMoney(payment.amountCents, order.currency)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(payment.paidAt)}
+                          {payment.note ? ` · ${payment.note}` : ''}
+                        </p>
+                      </div>
+                      <CircleDollarSign className="size-5 text-emerald-600" aria-hidden="true" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
-          {paymentLink ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <CopyRow label="Payment URL" value={paymentLink.url} />
-            </div>
-          ) : null}
-        </section>
+          <div className="space-y-6 lg:sticky lg:top-24">
+            <section className="rounded-2xl border border-slate-300 bg-white p-5">
+              <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+                <UserRound className="size-5 text-[#0b6b45]" />
+                <h2 className="font-semibold">Customer information</h2>
+              </div>
+              <div className="mt-5 flex items-center gap-3">
+                <img
+                  className="size-12 rounded-full bg-[#dff2e7]"
+                  src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(order.customer)}`}
+                  alt=""
+                />
+                <div>
+                  <p className="font-semibold">{order.customer}</p>
+                  {order.customerId ? (
+                    <a
+                      className="text-sm text-[#0b6b45] hover:underline"
+                      href={`/customers/${order.customerId}`}
+                    >
+                      View customer profile
+                    </a>
+                  ) : (
+                    <p className="text-sm text-slate-500">Guest customer</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
+                <p className="flex items-center gap-2">
+                  <Mail className="size-4 text-slate-400" /> Customer details available in profile
+                </p>
+                <p className="flex items-center gap-2">
+                  <CalendarDays className="size-4 text-slate-400" /> Due {formatDate(order.dueDate)}
+                </p>
+              </div>
+            </section>
+            <section className="rounded-2xl border border-slate-300 bg-white p-5">
+              <h2 className="font-semibold">Order status</h2>
+              <p className="mt-2 text-sm text-slate-500">
+                {getDueSummary(order.dueDate)} · {statusLabels[order.status]}
+              </p>
+            </section>
+          </div>
+        </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
@@ -202,6 +286,25 @@ function Summary({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border bg-white p-5 shadow-sm">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-3 text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between ${strong ? 'border-t border-slate-200 pt-3 text-base font-semibold text-slate-950' : 'text-slate-600'}`}
+    >
+      <span>{label}</span>
+      <span>{value}</span>
     </div>
   );
 }

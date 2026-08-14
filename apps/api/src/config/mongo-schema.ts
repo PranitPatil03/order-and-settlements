@@ -60,6 +60,8 @@ export const ordersCollectionValidator: Document = {
         },
       },
       subtotalCents: { bsonType: ['int', 'long'], minimum: 1 },
+      taxRateBps: { bsonType: ['int', 'long'], minimum: 0, maximum: 10000 },
+      taxCents: { bsonType: ['int', 'long'], minimum: 0 },
       totalCents: { bsonType: ['int', 'long'], minimum: 1 },
       grossPaidCents: { bsonType: ['int', 'long'], minimum: 0 },
       refundedTotalCents: { bsonType: ['int', 'long'], minimum: 0 },
