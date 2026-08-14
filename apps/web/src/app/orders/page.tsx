@@ -88,23 +88,27 @@ export default function OrdersPage() {
     <main className="min-h-screen bg-background text-foreground">
       <AppHeader userName={session.data?.user.name} />
       <div className="mx-auto max-w-7xl space-y-8 px-6 py-8 lg:px-8">
-        <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Overview</p>
-            <h1 className="mt-2 text-3xl font-semibold">Orders dashboard</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Track totals, payments, and outstanding balances.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="outline" onClick={exportCsv} disabled={isExporting}>
-              <Download className="size-4" aria-hidden="true" />
-              {isExporting ? 'Exporting...' : 'Export CSV'}
-            </Button>
-            <Button onClick={() => router.push('/orders/new')}>
-              <Plus className="size-4" aria-hidden="true" />
-              Create order
-            </Button>
+        <section className="relative overflow-hidden rounded-2xl border bg-white px-6 py-7 shadow-sm">
+          <div className="absolute -right-10 -top-12 h-36 w-36 rounded-full bg-primary/10 blur-2xl" />
+          <div className="absolute -bottom-16 left-1/3 h-36 w-36 rounded-full bg-cyan-400/10 blur-2xl" />
+          <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Overview</p>
+              <h1 className="mt-2 text-3xl font-semibold">Orders dashboard</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Track totals, collections, and customer payment progress.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" onClick={exportCsv} disabled={isExporting}>
+                <Download className="size-4" aria-hidden="true" />
+                {isExporting ? 'Exporting...' : 'Export CSV'}
+              </Button>
+              <Button onClick={() => router.push('/orders/new')}>
+                <Plus className="size-4" aria-hidden="true" />
+                Create order
+              </Button>
+            </div>
           </div>
         </section>
 

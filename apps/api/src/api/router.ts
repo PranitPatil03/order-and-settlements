@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { requireAuth, type AuthenticatedRequest } from '../auth/auth.middleware.js';
+import { customersRouter } from '../modules/customers/routes.js';
 import { ordersRouter } from '../modules/orders/routes.js';
 import { paymentsRouter } from '../modules/payments/routes.js';
 import { publicPaymentLinksRouter } from '../modules/payment-links/routes.js';
@@ -14,6 +15,7 @@ apiRouter.get('/me', requireAuth, (request, response) => {
   response.status(200).json({ data: { user: authenticatedRequest.user } });
 });
 
+apiRouter.use('/customers', customersRouter);
 apiRouter.use('/orders', ordersRouter);
 apiRouter.use('/orders/:orderId/payments', paymentsRouter);
 apiRouter.use('/orders/:orderId/refunds', refundsRouter);

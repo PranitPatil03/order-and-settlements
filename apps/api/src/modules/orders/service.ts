@@ -1,6 +1,10 @@
 import { AppError } from '../../common/errors/app-error.js';
 import { calculateOrderTotals } from '../../domain/order-totals.js';
 import { parseObjectId } from '../../common/utils/object-id.js';
+import { logger } from '../../common/logger.js';
+import { findCustomerById } from '../customers/repository.js';
+import { sendPaymentEmail } from '../../services/email.js';
+import { createPaymentLinkUseCase } from './payment-link.js';
 import {
   createOrder,
   findOrderById,
@@ -28,9 +32,67 @@ const getOrderOrThrow = async (userId: string, orderId: string) => {
   return order;
 };
 
+const resolveOrderCustomer = async (
+  userId: string,
+  input: { customerId?: string; customer?: string },
+) => {
+  if (!input.customerId) {
+    return {
+      customerId: null,
+      customerName: input.customer ?? 'Customer',
+      customerEmail: null,
+    };
+  }
+
+  const customer = await findCustomerById(userId, parseObjectId(input.customerId, 'customerId'));
+
+  if (!customer) {
+    throw new AppError('CUSTOMER_NOT_FOUND', 'Customer was not found.', 404);
+  }
+
+  return {
+    customerId: customer._id.toHexString(),
+    customerName: customer.name,
+    customerEmail: customer.email,
+  };
+};
+
 export const createOrderUseCase = async (userId: string, input: CreateOrderInput) => {
+  const customer = await resolveOrderCustomer(userId, input);
+
   const totals = calculateOrderTotals(input.lineItems);
-  const order = await createOrder(userId, input, totals.lineItems);
+
+  const order = await createOrder(
+    userId,
+    { ...input, customerId: customer.customerId ?? undefined, customer: customer.customerName },
+    totals.lineItems,
+  );
+
+  if (customer.customerEmail) {
+    try {
+      const paymentLink = await createPaymentLinkUseCase(userId, order._id.toHexString());
+
+      await sendPaymentEmail({
+        to: customer.customerEmail,
+        orderNumber: order._id.toHexString(),
+        amountDue: order.totalCents,
+        currency: order.currency,
+        paymentUrl: paymentLink.url,
+        customerName: customer.customerName,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          orderId: order._id.toHexString(),
+          userId,
+          customerEmail: customer.customerEmail,
+        },
+        'Failed to send payment email after order creation',
+      );
+    }
+  }
+
   return toOrderResponse(order);
 };
 
@@ -70,9 +132,20 @@ export const updateOrderUseCase = async (
     assertOrderCanChangeLineItems(currentOrder);
   }
 
+  const customer =
+    input.customerId === undefined
+      ? undefined
+      : await resolveOrderCustomer(userId, { customerId: input.customerId });
   const lineItems =
     input.lineItems === undefined ? undefined : calculateOrderTotals(input.lineItems).lineItems;
-  const updatedOrder = await updateOrder(userId, currentOrder._id, input, lineItems);
+  const updatedOrder = await updateOrder(
+    userId,
+    currentOrder._id,
+    customer
+      ? { ...input, customerId: customer.customerId ?? undefined, customer: customer.customerName }
+      : input,
+    lineItems,
+  );
 
   if (!updatedOrder) {
     throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);

@@ -2,6 +2,7 @@ import { app } from './app.js';
 import { env } from './config/environment.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { logger } from './common/logger.js';
+import { ensureCustomerIndexes } from './modules/customers/repository.js';
 import { ensureOrderIndexes } from './modules/orders/repository.js';
 import { ensurePaymentIndexes } from './modules/payments/repository.js';
 import { ensureRefundIndexes } from './modules/refunds/repository.js';
@@ -9,6 +10,7 @@ import { ensureAuditIndexes } from './modules/audit/service.js';
 
 const start = async () => {
   await connectDatabase();
+  await ensureCustomerIndexes();
   await ensureOrderIndexes();
   await ensurePaymentIndexes();
   await ensureRefundIndexes();

@@ -89,6 +89,16 @@ The Vercel project must use the repository root so the workspace lockfile and `v
 
 The API uses route, controller, service, domain, and repository layers. Orders are scoped by the authenticated user, line-item totals are calculated on the server, and order status is derived from totals and the UTC due date.
 
+Customer endpoints:
+
+```text
+GET    /api/customers
+POST   /api/customers
+GET    /api/customers/:customerId
+PATCH  /api/customers/:customerId
+DELETE /api/customers/:customerId
+```
+
 Order endpoints currently include:
 
 ```text
@@ -109,22 +119,24 @@ Line items and prices become read-only after the first payment or refund. Orders
 
 ### Payment meaning
 
-Payments are internal settlement records. The authenticated user is the account owner or finance operator who owns the order and records money received; that user is not treated as the payer. `customer` is currently a customer name stored on the order, not a customer login or payment identity. Recording a payment does not charge a card, send a payment link, or ask the customer to pay.
+Payments are settlement records owned by the authenticated user who created the order. That user is the finance operator, not the payer. When an order is created from a saved customer, the order stores both `customerId` and the current customer display name. The customer can pay through the protected public payment link, while internal payment recording remains available for manual back-office settlement.
 
-If customer self-service payments are added later, they should be a separate flow: invite or identify the customer in a portal, create a payment-provider intent, accept only provider webhooks as payment confirmation, and store the provider transaction ID for idempotency. Manual finance entries should remain available as a separate, clearly labelled operation.
+Public payments use Stripe Checkout. The API creates a card-only Checkout Session and only the verified Stripe webhook records a successful payment.
 
 ### Customer payment links
 
-An authenticated order owner can call `POST /api/orders/:orderId/payment-link`. The API derives a stable high-entropy opaque token and a separate 10-character access code from the order ID and server secret, stores only their SHA-256 hashes, and returns a URL such as `http://localhost:3000/pay/<token>` plus the code. Repeatedly copying the link returns the same URL and code. `DELETE` revokes the link.
+An authenticated order owner can call `POST /api/orders/:orderId/payment-link`. The API derives a stable high-entropy opaque token from the order ID and server secret, stores its SHA-256 hash, and returns a URL such as `http://localhost:3000/pay/<token>`. Repeatedly copying the link returns the same URL. `DELETE` revokes the link.
+
+When an order is created with a saved customer, the backend automatically creates the payment link and attempts to send a payment request email through Resend. Email delivery is intentionally graceful: if Resend is not configured or the email request fails, the order still exists and the error is logged for the operator.
 
 The public page calls:
 
 ```text
-GET  /api/public/payment-links/:token              X-Payment-Code: <code>
-POST /api/public/payment-links/:token/payments    X-Payment-Code + Idempotency-Key
+GET  /api/public/payment-links/:token
+POST /api/public/payment-links/:token/checkout-session
 ```
 
-The public response exposes the customer name, line items, currency, due date, totals, current balance, and payment history only after the access code is verified. The customer can submit a partial or full amount with an optional note. The page polls for new payment history every 10 seconds. The API applies the same balance and idempotency rules as internal payments and records the payment against the order owner's account. This is a demo/manual payment confirmation flow for the assignment; it does not process cards or move money. In production, replace this endpoint with a payment-provider checkout and verified webhook while retaining the opaque link and ownership boundaries.
+The public response exposes the customer name, line items, currency, due date, totals, current balance, and payment history for the opaque link. The customer selects a partial or full amount, is redirected to Stripe Checkout, and the page polls for updated payment history every 10 seconds. A verified Stripe webhook records the payment against the order owner's account and sends a confirmation email.
 
 ## How the API works
 
@@ -146,7 +158,7 @@ The controller does not calculate money and does not query MongoDB directly. The
 
 Refunds are stored in a separate append-only collection. A refund can never exceed the order's gross paid amount minus previous refunds, and it uses the same idempotency pattern as payments. Status changes caused by payment or refund activity are written to the append-only `audit_logs` collection. CSV export is ownership-scoped and streams the current order summary fields for an optional inclusive date range.
 
-The order detail dashboard exposes refund creation/history and status audit history. Audit history is read-only; there is no delete or update endpoint for audit records.
+The order detail dashboard links to separate refund and audit sections. Refund history supports creating a simple refund against paid amount. Audit history is read-only; there is no delete or update endpoint for audit records.
 
 Concurrency is handled with transactional payment and refund writes plus atomic balance checks in the repository layer. If two payments race for the same remaining balance, one transaction may fail with `PAYMENT_EXCEEDS_BALANCE` rather than over-allocating funds.
 
@@ -163,6 +175,7 @@ The collection is created on API startup before indexes are created. The current
 orders
 ├── _id: ObjectId
 ├── userId: string
+├── customerId: string | null
 ├── customer: string
 ├── dueDate: YYYY-MM-DD string
 ├── currency: 3-letter string
@@ -183,9 +196,13 @@ Indexes:
 ```text
 { userId: 1, createdAt: -1 }
 { userId: 1, dueDate: 1 }
+{ userId: 1, customerId: 1, createdAt: -1 }
+{ paymentLinkTokenHash: 1 } unique, partial on string token hashes
 ```
 
 The `userId` condition is included in every order repository query, which prevents one authenticated user from reading or modifying another user's data.
+
+The `customers` collection uses a partial unique index on `{ userId, email }` where `deletedAt` is `null`, so one user cannot create two active customers with the same email, while soft-deleted records do not block recreating that contact later.
 
 ## Payments
 
@@ -254,14 +271,18 @@ Frontend routes:
 ```text
 /login                  email/password sign in
 /signup                 email/password account creation
+/customers              customer directory and quick order handoff
 /orders                 authenticated dashboard and status filter
-/orders/new             create an order with line items
-/orders/:orderId        order detail, refunds, audit history, and payment history
+/orders/new             create an order with line items and optional saved customer
+/orders/:orderId        order detail and payment history
+/orders/:orderId/refunds refund creation and refund history
+/orders/:orderId/audit  read-only status audit history
+/pay/:token             customer payment page protected by access code
 ```
 
 The dashboard loads the authenticated session first. If no session exists, it redirects to `/login`. Once authenticated, it loads orders from `GET /api/orders`, computes dashboard summary values from the server response, and renders status badges using the same four domain statuses as the API.
 
-Creating an order converts the form's decimal display price to integer cents before calling the API. The API remains the source of truth and recalculates all totals. Recording a payment creates a fresh idempotency key in the browser and sends it with `POST /api/orders/:orderId/payments`.
+Creating an order converts the form's decimal display price to integer cents before calling the API. The user can select an existing customer, quick-create a customer with name/email, or type a one-off customer name. The API remains the source of truth and recalculates all totals. Recording a payment creates a fresh idempotency key in the browser and sends it with `POST /api/orders/:orderId/payments`.
 
 The UI uses shadcn-style primitives and a restrained visual system: neutral surfaces, navy text, one primary blue, and semantic status colors only where status meaning is needed. No frontend Testing Library is included for this assignment; API/domain correctness is verified at the backend boundary and the frontend is verified through typecheck, production build, and route smoke tests.
 
@@ -293,8 +314,10 @@ Creating an order follows this path:
 POST /api/orders
   -> createOrderSchema.parse(request.body)
   -> createOrderUseCase(userId, input)
+  -> resolve saved customer when customerId is present
   -> calculateOrderTotals(lineItems)
   -> createOrder(userId, calculated values)
+  -> create stable payment link and attempt payment email for saved customers
   -> toOrderResponse(order)
 ```
 

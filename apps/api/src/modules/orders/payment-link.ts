@@ -13,11 +13,7 @@ import {
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
-export const buildPaymentLinkPayload = (
-  orderId: string,
-  webOrigin: string,
-  secret: string,
-) => {
+export const buildPaymentLinkPayload = (orderId: string, webOrigin: string, secret: string) => {
   const token = createHmac('sha256', secret).update(`payment-link:${orderId}`).digest('base64url');
   const accessCode = createHmac('sha256', secret)
     .update(`payment-code:${orderId}`)
@@ -28,7 +24,7 @@ export const buildPaymentLinkPayload = (
   return {
     token,
     accessCode,
-    url: `${webOrigin}/pay/${token}#${accessCode}`,
+    url: `${webOrigin}/pay/${token}`,
   };
 };
 
@@ -38,8 +34,16 @@ export const createPaymentLinkUseCase = async (userId: string, orderIdValue: str
 
   if (!order) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
 
-  const paymentLink = buildPaymentLinkPayload(orderId.toHexString(), env.WEB_ORIGIN, env.BETTER_AUTH_SECRET);
-  if (order.paymentLinkTokenHash && order.paymentLinkAccessCodeHash && !order.paymentLinkRevokedAt) {
+  const paymentLink = buildPaymentLinkPayload(
+    orderId.toHexString(),
+    env.WEB_ORIGIN,
+    env.BETTER_AUTH_SECRET,
+  );
+  if (
+    order.paymentLinkTokenHash &&
+    order.paymentLinkAccessCodeHash &&
+    !order.paymentLinkRevokedAt
+  ) {
     return {
       url: paymentLink.url,
       accessCode: paymentLink.accessCode,
@@ -67,20 +71,14 @@ export const revokePaymentLinkUseCase = async (userId: string, orderIdValue: str
   if (!order) throw new AppError('ORDER_NOT_FOUND', 'Order was not found.', 404);
 };
 
-const getPublicOrderWithCode = async (token: string, accessCode: string) => {
+const getPublicOrderByToken = async (token: string) => {
   const order = await findOrderByPaymentLinkHash(hashToken(token));
   if (!order)
     throw new AppError('PAYMENT_LINK_INVALID', 'This payment link is invalid or expired.', 404);
-  if (
-    !order.paymentLinkAccessCodeHash ||
-    hashToken(accessCode.toUpperCase()) !== order.paymentLinkAccessCodeHash
-  ) {
-    throw new AppError('PAYMENT_CODE_INVALID', 'The payment access code is incorrect.', 401);
-  }
   return order;
 };
 
-export const getPublicOrderContextUseCase = async (token: string, accessCode: string) => {
-  const order = await getPublicOrderWithCode(token, accessCode);
+export const getPublicOrderContextUseCase = async (token: string) => {
+  const order = await getPublicOrderByToken(token);
   return { order, publicOrder: toPublicOrderResponse(order) };
 };

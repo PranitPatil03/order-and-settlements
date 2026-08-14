@@ -9,6 +9,13 @@ const environmentSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   WEB_ORIGIN: z.url(),
+  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_FROM_EMAIL: z.string().min(1).optional(),
+  APP_NAME: z.string().min(1).default('CrossVal'),
+  DEFAULT_CURRENCY: z.string().length(3).default('USD'),
+  PUBLIC_APP_URL: z.string().url().optional(),
 });
 
 export const env = environmentSchema.parse(process.env);

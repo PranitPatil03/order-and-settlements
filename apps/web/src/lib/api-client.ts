@@ -19,6 +19,7 @@ export type LineItem = {
 
 export type Order = {
   id: string;
+  customerId: string | null;
   customer: string;
   dueDate: string;
   currency: string;
@@ -30,6 +31,19 @@ export type Order = {
   netPaidCents: number;
   amountDueCents: number;
   status: OrderStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Customer = {
+  id: string;
+  name: string;
+  companyName: string | null;
+  email: string;
+  phone: string | null;
+  billingAddress: string | null;
+  shippingAddress: string | null;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -102,8 +116,31 @@ export async function downloadOrdersCsv() {
   URL.revokeObjectURL(url);
 }
 
+export async function getCustomers() {
+  const response = await apiRequest<{ data: { items: Customer[] } }>('/api/customers');
+  return response.data.items;
+}
+
+export async function createCustomer(input: {
+  name: string;
+  companyName?: string;
+  email: string;
+  phone?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  notes?: string;
+}) {
+  const response = await apiRequest<{ data: Customer }>('/api/customers', {
+    method: 'POST',
+    body: input,
+  });
+  return response.data;
+}
+
 export async function createOrder(input: {
-  customer: string;
+  customerId?: string;
+  customer?: string;
+  currency?: string;
   dueDate: string;
   lineItems: Array<{ description: string; quantity: number; unitPriceCents: number }>;
 }) {
@@ -167,24 +204,18 @@ export async function createPaymentLink(orderId: string) {
   return response.data;
 }
 
-export async function getPublicOrder(token: string, accessCode: string) {
+export async function getPublicOrder(token: string) {
   const response = await apiRequest<{ data: { order: Order; payments: Payment[] } }>(
     `/api/public/payment-links/${token}`,
-    { headers: { 'X-Payment-Code': accessCode } },
   );
   return response.data;
 }
 
-export async function payPublicOrder(
-  token: string,
-  accessCode: string,
-  input: { amountCents: number; note?: string },
-) {
-  const response = await apiRequest<{ data: { order: Order } }>(
-    `/api/public/payment-links/${token}/payments`,
+export async function createPublicCheckoutSession(token: string, input: { amountCents: number }) {
+  const response = await apiRequest<{ data: { url: string; id: string } }>(
+    `/api/public/payment-links/${token}/checkout-session`,
     {
       method: 'POST',
-      headers: { 'Idempotency-Key': crypto.randomUUID(), 'X-Payment-Code': accessCode },
       body: input,
     },
   );

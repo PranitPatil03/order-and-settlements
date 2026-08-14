@@ -71,7 +71,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     try {
       const result = await createPaymentLink(order.id);
       setPaymentLink(result);
-      await navigator.clipboard?.writeText(`${result.url}\nAccess code: ${result.accessCode}`);
+      await navigator.clipboard?.writeText(result.url);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -189,7 +189,6 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           {paymentLink ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <CopyRow label="Payment URL" value={paymentLink.url} />
-              <CopyRow label="Access code" value={paymentLink.accessCode} />
             </div>
           ) : null}
         </section>

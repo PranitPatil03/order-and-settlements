@@ -6,14 +6,23 @@ const lineItemSchema = z.object({
   unitPriceCents: z.number().int().min(1).max(1_000_000_000),
 });
 
-export const createOrderSchema = z.object({
-  customer: z.string().trim().min(1).max(200),
-  dueDate: z.iso.date(),
-  currency: z.string().trim().length(3).default('USD'),
-  lineItems: z.array(lineItemSchema).min(1).max(100),
-});
+export const orderCurrencySchema = z.enum(['USD', 'INR', 'EUR', 'GBP']);
+
+export const createOrderSchema = z
+  .object({
+    customerId: z.string().trim().min(1).optional(),
+    customer: z.string().trim().min(1).max(200).optional(),
+    dueDate: z.iso.date(),
+    currency: orderCurrencySchema.default('USD'),
+    lineItems: z.array(lineItemSchema).min(1).max(100),
+  })
+  .refine((value) => Boolean(value.customerId || value.customer), {
+    message: 'Either customerId or customer name is required.',
+    path: ['customer'],
+  });
 
 export const updateOrderSchema = z.object({
+  customerId: z.string().trim().min(1).optional(),
   customer: z.string().trim().min(1).max(200).optional(),
   dueDate: z.iso.date().optional(),
   lineItems: z.array(lineItemSchema).min(1).max(100).optional(),

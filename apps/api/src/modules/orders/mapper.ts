@@ -10,6 +10,7 @@ export const toOrderResponse = (order: OrderDocument): OrderResponse => {
 
   return {
     id: order._id.toHexString(),
+    customerId: order.customerId,
     customer: order.customer,
     dueDate: order.dueDate,
     currency: order.currency,

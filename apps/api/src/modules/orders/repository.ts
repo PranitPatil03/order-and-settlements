@@ -10,14 +10,30 @@ const orders = () => database().collection<OrderDocument>('orders');
 
 export const ensureOrderIndexes = async () => {
   await ensureOrdersCollection();
+
+  const existingIndexes = await orders().indexes();
+  const paymentLinkIndex = existingIndexes.find(
+    (index) => index.name === 'orders_payment_link_token',
+  );
+
+  const requiresPaymentLinkIndexMigration =
+    paymentLinkIndex &&
+    (!paymentLinkIndex.unique ||
+      paymentLinkIndex.partialFilterExpression?.paymentLinkTokenHash?.$type !== 'string');
+
+  if (requiresPaymentLinkIndexMigration) {
+    await orders().dropIndex('orders_payment_link_token');
+  }
+
   await orders().createIndexes([
     { key: { userId: 1, createdAt: -1 }, name: 'orders_user_created' },
     { key: { userId: 1, dueDate: 1 }, name: 'orders_user_due_date' },
+    { key: { userId: 1, customerId: 1, createdAt: -1 }, name: 'orders_user_customer_created' },
     {
       key: { paymentLinkTokenHash: 1 },
       name: 'orders_payment_link_token',
       unique: true,
-      sparse: true,
+      partialFilterExpression: { paymentLinkTokenHash: { $type: 'string' } },
     },
   ]);
 };
@@ -31,7 +47,8 @@ export const createOrder = async (
   const document: OrderDocument = {
     _id: new ObjectId(),
     userId,
-    customer: input.customer,
+    customerId: input.customerId ?? null,
+    customer: input.customer ?? 'Customer',
     dueDate: input.dueDate,
     currency: input.currency,
     lineItems,
@@ -126,10 +143,12 @@ export const findOrdersPage = async (userId: string, input: ListOrdersInput) => 
     },
   ];
 
-  const [result] = await orders().aggregate<{
-    items: OrderDocument[];
-    total: Array<{ count: number }>;
-  }>(pipeline).toArray();
+  const [result] = await orders()
+    .aggregate<{
+      items: OrderDocument[];
+      total: Array<{ count: number }>;
+    }>(pipeline)
+    .toArray();
 
   return {
     items: result?.items ?? [],
@@ -159,6 +178,7 @@ export const updateOrder = async (
 ) => {
   const update: Partial<OrderDocument> = {
     ...(input.customer === undefined ? {} : { customer: input.customer }),
+    ...(input.customerId === undefined ? {} : { customerId: input.customerId }),
     ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
     ...(lineItems === undefined
       ? {}

@@ -2,6 +2,26 @@ import type { Document } from 'mongodb';
 
 import { database } from './database.js';
 
+export const customersCollectionValidator: Document = {
+  $jsonSchema: {
+    bsonType: 'object',
+    required: ['userId', 'name', 'email', 'createdAt', 'updatedAt'],
+    properties: {
+      userId: { bsonType: 'string', minLength: 1 },
+      name: { bsonType: 'string', minLength: 1, maxLength: 200 },
+      companyName: { bsonType: ['string', 'null'], maxLength: 200 },
+      email: { bsonType: 'string', minLength: 1, maxLength: 320 },
+      phone: { bsonType: ['string', 'null'], maxLength: 50 },
+      billingAddress: { bsonType: ['string', 'null'], maxLength: 1000 },
+      shippingAddress: { bsonType: ['string', 'null'], maxLength: 1000 },
+      notes: { bsonType: ['string', 'null'], maxLength: 2000 },
+      deletedAt: { bsonType: ['date', 'null'] },
+      createdAt: { bsonType: 'date' },
+      updatedAt: { bsonType: 'date' },
+    },
+  },
+};
+
 export const ordersCollectionValidator: Document = {
   $jsonSchema: {
     bsonType: 'object',
@@ -21,6 +41,7 @@ export const ordersCollectionValidator: Document = {
     ],
     properties: {
       userId: { bsonType: 'string', minLength: 1 },
+      customerId: { bsonType: ['string', 'null'], minLength: 1 },
       customer: { bsonType: 'string', minLength: 1, maxLength: 200 },
       dueDate: { bsonType: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
       currency: { bsonType: 'string', minLength: 3, maxLength: 3 },
@@ -106,6 +127,18 @@ export const auditLogsCollectionValidator: Document = {
       occurredAt: { bsonType: 'date' },
     },
   },
+};
+
+export const ensureCustomersCollection = async () => {
+  const collectionExists = await database().listCollections({ name: 'customers' }).hasNext();
+
+  if (!collectionExists) {
+    await database().createCollection('customers', {
+      validator: customersCollectionValidator,
+      validationLevel: 'strict',
+      validationAction: 'error',
+    });
+  }
 };
 
 export const ensureOrdersCollection = async () => {

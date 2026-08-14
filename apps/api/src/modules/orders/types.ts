@@ -5,6 +5,7 @@ import type { CalculatedLineItem } from '../../domain/order-totals.js';
 export type OrderDocument = {
   _id: ObjectId;
   userId: string;
+  customerId: string | null;
   customer: string;
   dueDate: string;
   currency: string;
@@ -24,6 +25,7 @@ export type OrderDocument = {
 
 export type OrderResponse = {
   id: string;
+  customerId: string | null;
   customer: string;
   dueDate: string;
   currency: string;

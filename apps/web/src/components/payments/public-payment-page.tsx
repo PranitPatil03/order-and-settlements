@@ -1,131 +1,90 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, LoaderCircle, RefreshCw } from 'lucide-react';
+import { CreditCard, LoaderCircle, RefreshCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { getPublicOrder, payPublicOrder, type Order, type Payment } from '@/lib/api-client';
+import {
+  createPublicCheckoutSession,
+  getPublicOrder,
+  type Order,
+  type Payment,
+} from '@/lib/api-client';
 import { formatDate, formatMoney, getDueSummary } from '@/lib/format';
 
+const getStripeMaximumPaymentCents = (currency: string) => {
+  switch (currency.toUpperCase()) {
+    case 'USD':
+      return 2_600_000;
+    case 'INR':
+      return 249_000_000;
+    default:
+      return 99_000_000;
+  }
+};
+
 export function PublicPaymentPage({ token }: { token: string }) {
-  const [accessCode, setAccessCode] = useState('');
-  const [codeInput, setCodeInput] = useState('');
   const [order, setOrder] = useState<Order | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
   const [error, setError] = useState('');
-  const [complete, setComplete] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
 
-  const load = useCallback(
-    async (code: string) => {
-      const result = await getPublicOrder(token, code);
-      setOrder(result.order);
-      setPayments(result.payments);
-    },
-    [token],
-  );
-
-  const openWithCode = useCallback(
-    async (code: string) => {
-      const normalized = code.trim().toUpperCase();
-
-      if (!normalized) return;
-
-      await load(normalized);
-      setCodeInput(normalized);
-      setAccessCode(normalized);
-    },
-    [load],
-  );
-
-  useEffect(() => {
-    if (!accessCode) return;
-    const refresh = () => void load(accessCode).catch(() => undefined);
-    const interval = window.setInterval(refresh, 10_000);
-    return () => window.clearInterval(interval);
-  }, [accessCode, load]);
-
-  useEffect(() => {
-    const fragmentCode = window.location.hash.slice(1).trim();
-    if (!fragmentCode || accessCode) return;
-    void openWithCode(fragmentCode).catch(() => undefined);
-  }, [accessCode, openWithCode]);
-
-  const unlock = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await openWithCode(codeInput);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to open this payment link.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!order) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const result = await payPublicOrder(token, accessCode, {
-        amountCents: Math.round(Number(amount) * 100),
-        note: note.trim() || undefined,
-      });
-      setOrder(result.order);
-      const refreshed = await getPublicOrder(token, accessCode);
-      setPayments(refreshed.payments);
-      setComplete(true);
-      setAmount('');
-      setNote('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to record payment.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (!accessCode) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-5 text-slate-950">
-        <section className="w-full max-w-md rounded-lg border bg-white p-6 shadow-sm">
-          <p className="text-sm font-medium text-slate-500">CrossVal payment link</p>
-          <h1 className="mt-2 text-2xl font-semibold">Opening payment link</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            If the code is not included in the link, enter it below.
-          </p>
-          <form className="mt-6 space-y-4" onSubmit={unlock}>
-            <div className="space-y-2">
-              <Label htmlFor="payment-code">Access code</Label>
-              <Input
-                id="payment-code"
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                maxLength={10}
-                autoComplete="one-time-code"
-                required
-              />
-            </div>
-            {error ? <p className="text-sm text-red-700">{error}</p> : null}
-            <Button className="w-full" disabled={loading}>
-              {loading ? 'Opening...' : 'View order'}
-            </Button>
-          </form>
-        </section>
-      </main>
+  const load = useCallback(async () => {
+    const result = await getPublicOrder(token);
+    setOrder(result.order);
+    setPayments(result.payments);
+    setAmount((current) =>
+      current ||
+      (
+        Math.min(
+          result.order.amountDueCents,
+          getStripeMaximumPaymentCents(result.order.currency),
+        ) / 100
+      ).toFixed(2),
     );
-  }
+  }, [token]);
+
+  useEffect(() => {
+    const refresh = () =>
+      void load().catch((e) =>
+        setError(e instanceof Error ? e.message : 'Unable to open this payment link.'),
+      );
+    const interval = window.setInterval(refresh, 10_000);
+    void refresh();
+    return () => window.clearInterval(interval);
+  }, [load]);
+
+  const openStripeCheckout = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!order || !amount) return;
+
+    const amountCents = Math.round(Number(amount) * 100);
+
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      setError('Enter a valid amount before opening checkout.');
+      return;
+    }
+
+    setOpeningCheckout(true);
+    setError('');
+
+    try {
+      const session = await createPublicCheckoutSession(token, { amountCents });
+      window.location.href = session.url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to start Stripe checkout.');
+      setOpeningCheckout(false);
+    }
+  };
 
   if (!order) return <Loading />;
+
+  const maximumStripePaymentCents = getStripeMaximumPaymentCents(order.currency);
+  const maximumPaymentCents = Math.min(order.amountDueCents, maximumStripePaymentCents);
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-950">
@@ -169,20 +128,17 @@ export function PublicPaymentPage({ token }: { token: string }) {
             <span>Amount due</span>
             <span>{formatMoney(order.amountDueCents, order.currency)}</span>
           </div>
-          <p className="mt-2 text-sm text-slate-500">Enter the amount in {order.currency} units.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            Enter the amount in {order.currency} units. Stripe allows up to{' '}
+            {formatMoney(maximumStripePaymentCents, order.currency)} per payment; larger balances
+            can be paid through multiple Stripe payments.
+          </p>
         </section>
-        {complete ? (
-          <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
-            <CheckCircle2 className="size-6" />
-            <h2 className="mt-3 font-semibold">Payment recorded</h2>
-            <p className="mt-1 text-sm">The order balance and payment history have been updated.</p>
-          </section>
-        ) : null}
         {order.amountDueCents > 0 ? (
           <section className="rounded-lg border bg-white p-6 shadow-sm">
             <h2 className="font-semibold">Pay this order</h2>
-            <p className="mt-1 text-sm text-slate-500">You can make a full or partial payment.</p>
-            <form className="mt-5 space-y-4" onSubmit={submit}>
+            <p className="mt-1 text-sm text-slate-500">Secure payment powered by Stripe.</p>
+            <form className="mt-5 space-y-4" onSubmit={openStripeCheckout}>
               <div className="space-y-2">
                 <Label htmlFor="public-payment-amount">Amount</Label>
                 <Input
@@ -190,25 +146,16 @@ export function PublicPaymentPage({ token }: { token: string }) {
                   type="number"
                   min="0.01"
                   step="0.01"
-                  max={(order.amountDueCents / 100).toFixed(2)}
+                  max={(maximumPaymentCents / 100).toFixed(2)}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="public-payment-note">Note</Label>
-                <Textarea
-                  id="public-payment-note"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Optional note for the payment"
-                  maxLength={1000}
-                />
-              </div>
               {error ? <p className="text-sm text-red-700">{error}</p> : null}
-              <Button className="w-full" disabled={submitting}>
-                {submitting ? 'Processing...' : 'Pay order'}
+              <Button className="w-full" disabled={openingCheckout}>
+                <CreditCard className="size-4" aria-hidden="true" />
+                {openingCheckout ? 'Opening Stripe checkout...' : 'Pay with Stripe'}
               </Button>
             </form>
           </section>
