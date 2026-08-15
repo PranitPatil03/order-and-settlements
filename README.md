@@ -2,7 +2,12 @@
 
 CrossVal is an order-operations workspace. Authenticated operators create orders, manage customers, calculate tax and balances, send secure payment links, record payments, process refunds, and review the complete order lifecycle.
 
-This README explains the objective, core features, system design, backend/API behavior, local development, integrations, testing, and deployment expectations so a new developer can understand the complete application.
+## Deployed application
+
+```text
+Frontend: order-and-settlements.vercel.app
+Health: api-orders-settlements.up.railway.app/health
+```
 
 ## Contents
 
@@ -18,89 +23,40 @@ This README explains the objective, core features, system design, backend/API be
 
 ## 1. System overview
 
-CrossVal is a pnpm monorepo with a Next.js workspace, an Express API protected by Better Auth, MongoDB persistence, and server-side payment/email integrations. The complete application is represented by one main system diagram:
+CrossVal has a simple request path:
 
-```mermaid
-flowchart LR
-    UI["Next.js workspace UI\nAuthenticated operator pages"]
-    PUBLIC["Public payment page\nTokenized customer access"]
-    AUTH["Better Auth\nSession cookie"]
-    API["Express API\nRequest IDs, validation, errors"]
-    ROUTES["Routes + controllers\nHTTP boundary"]
-    SERVICES["Feature services\nOrders, customers, payments, refunds, audit"]
-    DOMAIN["Domain rules\nTax, totals, balance, status, policies"]
-    REPOS["MongoDB repositories\nOwnership-scoped queries"]
-    DB[("MongoDB\nOrders, customers, payments, refunds, audit")]
-    STRIPE["Stripe Checkout"]
-    WEBHOOK["Verified Stripe webhook"]
-    EMAIL["Email service\nPayment request + confirmation"]
-
-    UI -->|Authenticated REST requests| AUTH
-    AUTH --> API
-    PUBLIC -->|Public payment requests| API
-    API --> ROUTES
-    ROUTES --> SERVICES
-    SERVICES --> DOMAIN
-    DOMAIN --> SERVICES
-    SERVICES --> REPOS
-    REPOS --> DB
-    SERVICES -->|Create checkout session| STRIPE
-    STRIPE -->|Signed completion event| WEBHOOK
-    WEBHOOK -->|Verified payment metadata| API
-    SERVICES -->|Payment request / confirmation| EMAIL
-    SERVICES -.->|Payment, refund, status events| DB
+```text
+Next.js UI
+  → Express API + Better Auth
+  → routes and controllers
+  → service/use-case layer
+  → domain rules and authorization
+  → MongoDB repositories
+  → MongoDB
 ```
 
-### How to read the diagram
+### How the backend works
 
-| Layer | What it does | What it must not do |
-| --- | --- | --- |
-| Next.js UI | Collects input and displays API state | Calculate trusted financial totals or write to MongoDB |
-| Express API | Authenticates, validates, authorizes, and coordinates use cases | Trust browser-supplied ownership or payment success |
-| Domain layer | Calculates tax, totals, balance, status, and policies | Depend on HTTP, MongoDB, or provider SDKs |
-| Repositories | Read/write ownership-scoped MongoDB documents | Apply UI behavior or provider workflows |
-| Integrations | Create Checkout sessions, verify webhooks, send emails | Decide CrossVal payment state without API validation |
+1. `server.ts` connects to MongoDB, prepares indexes, creates the Express app, and starts the API server.
+2. `api/router.ts` mounts the customer, order, payment, refund, audit, payment-link, auth, and health routes.
+3. Middleware adds request IDs, handles CORS, parses requests, authenticates Better Auth sessions, and formats errors.
+4. A route sends the request to a controller. Controllers handle HTTP input and keep business logic out of the route layer.
+5. The service layer performs the use case: it checks ownership, validates policies, resolves related customers, coordinates transactions, and calls integrations.
+6. The domain layer calculates line totals, tax, order totals, balances, and statuses using pure functions.
+7. Repositories read and write MongoDB. Private queries always include the authenticated `userId`.
+8. Mappers convert database documents into safe API responses without internal IDs, token hashes, or provider details.
 
-### Request lifecycle
+### Complete payment flow
 
-1. **Receive:** Express parses the request, adds a request ID, and applies common middleware.
-2. **Authenticate:** Better Auth validates the session cookie for private routes.
-3. **Validate:** The controller validates route parameters and request body schemas.
-4. **Execute:** The feature service checks ownership and policies, then calls domain rules.
-5. **Persist:** The repository reads/writes MongoDB with the authenticated `userId`.
-6. **Respond:** A mapper returns safe JSON; errors use a stable code, message, details, and request ID.
+```text
+Create order → calculate tax and total → store order
+     → create protected payment link → customer opens public page
+     → validate amount → create Checkout session
+     → verify signed webhook → record payment transactionally
+     → update balance/status → write audit event → send confirmation email
+```
 
-### End-to-end payment lifecycle
-
-| Stage | Backend action | Result |
-| --- | --- | --- |
-| Order | Validate customer, line items, currency, due date, and tax | Calculated order stored |
-| Link | Generate protected public token | Customer can open payment page |
-| Checkout | Validate amount and create provider session | Customer is redirected to Checkout |
-| Webhook | Verify signed completion event | Payment enters the payment service |
-| Payment | Transaction + idempotency check | Paid amount, balance, and status update |
-| Audit | Record payment/status event | Lifecycle becomes traceable |
-| Email | Send request or confirmation | Customer receives order/payment details |
-| Refund | Validate refundable balance and transact | Refund, balance, and audit update |
-
-The key rule is that creating a link or opening Checkout never marks an order as paid. Only the verified webhook can do that.
-
-### Backend folders at a glance
-
-| Folder | Role in the backend flow |
-| --- | --- |
-| `api/` | Combines route groups and exposes the HTTP API |
-| `auth/` | Creates Better Auth and protects private requests |
-| `common/` | Shared errors, logging, request IDs, async handling, and ID parsing |
-| `config/` | Loads environment values, connects MongoDB, configures CORS, and creates indexes/schema |
-| `domain/` | Pure order totals, tax, status, and policy rules |
-| `modules/customers/` | Customer schemas, routes, controllers, services, repositories, and mappers |
-| `modules/orders/` | Order CRUD, order policies, totals, payment-link creation, and order mapping |
-| `modules/payments/` | Payment validation, idempotency, transactions, and payment history |
-| `modules/refunds/` | Refund validation, refund history, transactions, and balance changes |
-| `modules/audit/` | Lifecycle event storage/querying and audit timeline data |
-| `modules/payment-links/` | Public token resolution and public Checkout-session requests |
-| `services/` | Stripe and email provider adapters; integrations do not own business state |
+Refunds use the same service and repository pattern. The refund service validates the refundable balance, stores the refund, updates the order balance, and writes an audit event. Creating a payment link or opening Checkout never marks an order as paid; only the verified webhook does that.
 
 ## 2. Repository structure
 
