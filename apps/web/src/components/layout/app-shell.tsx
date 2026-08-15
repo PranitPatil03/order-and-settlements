@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, FileText, History, LogOut, Menu, RotateCcw, Users, X } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ChevronDown, FileText, LogOut, Menu, Users, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { authClient } from '@/lib/auth-client';
@@ -11,8 +11,6 @@ import { cn } from '@/lib/utils';
 const navigation = [
   { href: '/orders', label: 'Orders', icon: FileText },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/orders?view=refunded', label: 'Refunds', icon: RotateCcw },
-  { href: '/orders?view=audit', label: 'Audit trail', icon: History },
 ];
 
 export function AppShell({
@@ -26,7 +24,6 @@ export function AppShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const signOut = async () => {
@@ -65,17 +62,7 @@ export function AppShell({
           </p>
           {navigation.map((item) => {
             const itemPath = item.href.split('?')[0];
-            const itemView = new URLSearchParams(item.href.split('?')[1] ?? '').get('view');
-            const isNestedRefunds = pathname.endsWith('/refunds');
-            const isNestedAudit = pathname.endsWith('/audit');
-            const active = itemView
-              ? searchParams.get('view') === itemView ||
-                (itemView === 'refunded' && isNestedRefunds) ||
-                (itemView === 'audit' && isNestedAudit)
-              : pathname === itemPath &&
-                !searchParams.get('view') &&
-                !isNestedRefunds &&
-                !isNestedAudit;
+            const active = pathname === itemPath || pathname.startsWith(`${itemPath}/`);
             const Icon = item.icon;
             return (
               <Link
@@ -96,7 +83,7 @@ export function AppShell({
         </nav>
 
         <div className="mt-auto space-y-3">
-          <div className="rounded-2xl border border-white/15 bg-white/10 p-3">
+          <div className="p-3 border/10">
             <div className="flex items-center gap-3">
               <Avatar name={userName ?? 'CrossVal user'} />
               <div className="min-w-0">
@@ -110,7 +97,7 @@ export function AppShell({
           </div>
           <button
             onClick={signOut}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white"
+            className="flex w-full items-center gap-3 rounded px-3 py-2.5 text-sm font-medium text-white/70 bg-white/10 hover:text-white"
           >
             <LogOut className="size-[18px]" /> Log out
           </button>

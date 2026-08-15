@@ -192,6 +192,7 @@ export const updateOrder = async (
   orderId: ObjectId,
   input: UpdateOrderInput,
   lineItems?: OrderDocument['lineItems'],
+  taxRateBps = input.taxRateBps ?? 0,
 ) => {
   const update: Partial<OrderDocument> = {
     ...(input.customer === undefined ? {} : { customer: input.customer }),
@@ -202,15 +203,15 @@ export const updateOrder = async (
       : {
           lineItems,
           subtotalCents: lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0),
-          taxRateBps: input.taxRateBps ?? 0,
+          taxRateBps,
           taxCents: Math.round(
             (lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) *
-              (input.taxRateBps ?? 0)) /
+              taxRateBps) /
               10_000,
           ),
           totalCents: Math.round(
             lineItems.reduce((sum, item) => sum + item.lineTotalCents, 0) *
-              (1 + (input.taxRateBps ?? 0) / 10_000),
+              (1 + taxRateBps / 10_000),
           ),
         }),
     updatedAt: new Date(),

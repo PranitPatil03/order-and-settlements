@@ -342,7 +342,7 @@ export function OrderForm() {
                   <div className="mt-5 space-y-4">
                     {lineItems.map((item, index) => (
                       <div
-                        className="grid gap-3 rounded-md border bg-slate-50 p-4 sm:grid-cols-[1fr_100px_140px_auto] sm:items-end"
+                        className="grid gap-3 p-4 sm:grid-cols-[1fr_100px_140px_auto] sm:items-end"
                         key={index}
                       >
                         <div className="space-y-2">

@@ -47,8 +47,8 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [paymentLink, setPaymentLink] = useState<{ url: string; createdAt: string } | null>(null);
   const [isCreatingLink, setIsCreatingLink] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     if (!session.isPending && !session.data) router.replace('/login');
@@ -79,8 +79,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
     setErrorMessage('');
     try {
       const result = await createPaymentLink(order.id);
-      setPaymentLink(result);
       await navigator.clipboard?.writeText(result.url);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2200);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -99,12 +100,12 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   return (
     <AppShell userName={session.data?.user.name} userEmail={session.data?.user.email}>
       <div className="mx-auto max-w-[1240px] space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge className={statusStyles[order.status]}>{statusLabels[order.status]}</Badge>
             <Button onClick={generatePaymentLink} disabled={isCreatingLink}>
               <Copy className="size-4" aria-hidden="true" />
-              {isCreatingLink ? 'Creating link...' : 'Generate payment link'}
+              {isCreatingLink ? 'Creating link...' : linkCopied ? 'Payment link copied' : 'Payment link'}
             </Button>
             <Button variant="outline" onClick={() => router.push(`/orders/${orderId}/refunds`)}>
               Refunds
@@ -114,7 +115,6 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </Button>
           </div>
         </div>
-        {paymentLink ? <CopyRow label="Payment URL" value={paymentLink.url} /> : null}
         <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <p className="text-sm font-semibold text-[#0b6b45]">Orders / Detail</p>
@@ -138,8 +138,12 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </p>
           </div>
         </section>
-        <section className="grid gap-3 sm:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Summary label="Order total" value={formatMoney(order.totalCents, order.currency)} />
+          <Summary
+            label={`Tax (${(order.taxRateBps / 100).toFixed(2)}%)`}
+            value={formatMoney(order.taxCents, order.currency)}
+          />
           <Summary label="Gross paid" value={formatMoney(order.grossPaidCents, order.currency)} />
           <Summary label="Refunded" value={formatMoney(order.refundedTotalCents, order.currency)} />
           <Summary label="Amount due" value={formatMoney(order.amountDueCents, order.currency)} />
@@ -187,6 +191,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                 <SummaryRow
                   label="Gross paid"
                   value={formatMoney(order.grossPaidCents, order.currency)}
+                />
+                <SummaryRow
+                  label={`Tax (${(order.taxRateBps / 100).toFixed(2)}%)`}
+                  value={formatMoney(order.taxCents, order.currency)}
                 />
                 <SummaryRow
                   label="Total refund"
@@ -305,26 +313,6 @@ function SummaryRow({
     >
       <span>{label}</span>
       <span>{value}</span>
-    </div>
-  );
-}
-
-function CopyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-white p-3 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-sky-700">{label}</p>
-      <div className="mt-2 flex items-start gap-3">
-        <p className="min-w-0 flex-1 break-all text-sm text-slate-900">{value}</p>
-        <button
-          className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border bg-slate-50 px-3 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
-          type="button"
-          onClick={async () => {
-            await navigator.clipboard?.writeText(value);
-          }}
-        >
-          Copy
-        </button>
-      </div>
     </div>
   );
 }

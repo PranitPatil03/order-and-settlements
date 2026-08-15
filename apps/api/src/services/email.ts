@@ -16,20 +16,30 @@ export const sendPaymentEmail = async ({
   to,
   orderNumber,
   amountDue,
+  totalCents,
   currency,
   paymentUrl,
   customerName,
+  companyName,
   dueDate,
   lineItems = [],
+  subtotalCents,
+  taxCents = 0,
+  taxRateBps = 0,
 }: {
   to: string;
   orderNumber: string;
   amountDue: number;
+  totalCents?: number;
   currency: string;
   paymentUrl: string;
   customerName: string;
+  companyName?: string | null;
   dueDate?: string;
   lineItems?: Array<{ description: string; quantity: number; lineTotalCents: number }>;
+  subtotalCents?: number;
+  taxCents?: number;
+  taxRateBps?: number;
 }) => {
   if (!resend || !env.RESEND_FROM_EMAIL) {
     return null;
@@ -40,6 +50,7 @@ export const sendPaymentEmail = async ({
     currency,
   }).format(amountDue / 100);
   const safeCustomerName = escapeHtml(customerName);
+  const safeCompanyName = companyName ? escapeHtml(companyName) : '';
   const safeOrderNumber = escapeHtml(orderNumber);
   const safePaymentUrl = escapeHtml(paymentUrl);
   const safeAppName = escapeHtml(env.APP_NAME);
@@ -54,7 +65,7 @@ export const sendPaymentEmail = async ({
   return resend.emails.send({
     from: env.RESEND_FROM_EMAIL,
     to,
-    subject: `CrossVal payment request — Order ${safeOrderNumber}`,
+    subject: `CrossVal payment request — ${safeCompanyName || safeCustomerName} · Order ${safeOrderNumber}`,
     html: `
       <div style="font-family: Arial, sans-serif; padding: 32px; color: #10231a; background:#f6f8f6;">
         <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #dce6df;border-radius:16px;overflow:hidden;">
@@ -64,6 +75,11 @@ export const sendPaymentEmail = async ({
             <h2 style="margin:10px 0 0;font-size:24px;">A payment request is ready for ${safeCustomerName}.</h2>
             <p style="color:#64756b;line-height:1.6;">Review the order details below and complete your payment securely through Stripe.</p>
             <table style="width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;"><tbody>${itemsMarkup}</tbody></table>
+            <table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;"><tbody>
+              <tr><td style="padding:7px 0;color:#64756b;">Subtotal</td><td style="padding:7px 0;text-align:right;">${new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((subtotalCents ?? Math.max(0, amountDue - taxCents)) / 100)}</td></tr>
+              <tr><td style="padding:7px 0;color:#64756b;">Tax${taxRateBps ? ` (${(taxRateBps / 100).toFixed(2)}%)` : ''}</td><td style="padding:7px 0;text-align:right;">${new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(taxCents / 100)}</td></tr>
+              <tr><td style="padding:10px 0;border-top:1px solid #dce6df;font-weight:700;">Total</td><td style="padding:10px 0;border-top:1px solid #dce6df;text-align:right;font-weight:700;">${new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((totalCents ?? amountDue) / 100)}</td></tr>
+            </tbody></table>
             <div style="padding:16px;border-radius:12px;background:#e4f3eb;"><div style="font-size:12px;color:#557163;">Amount due</div><div style="margin-top:4px;font-size:24px;font-weight:700;color:#0b6b45;">${formatted}</div>${safeDueDate ? `<div style="margin-top:5px;font-size:13px;color:#557163;">Due ${safeDueDate}</div>` : ''}</div>
         <p>
           <a href="${safePaymentUrl}" style="display:inline-block;background:#0b6b45;color:white;padding:13px 22px;text-decoration:none;border-radius:10px;font-weight:700;">
@@ -87,6 +103,7 @@ export const sendPaymentConfirmationEmail = async ({
   currency,
   paymentUrl,
   customerName,
+  companyName,
 }: {
   to: string;
   orderNumber: string;
@@ -95,19 +112,21 @@ export const sendPaymentConfirmationEmail = async ({
   currency: string;
   paymentUrl: string;
   customerName: string;
+  companyName?: string | null;
 }) => {
   if (!resend || !env.RESEND_FROM_EMAIL) return null;
 
   const formatAmount = (amount: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount / 100);
   const safeCustomerName = escapeHtml(customerName);
+  const safeCompanyName = companyName ? escapeHtml(companyName) : '';
   const safeOrderNumber = escapeHtml(orderNumber);
   const safePaymentUrl = escapeHtml(paymentUrl);
 
   return resend.emails.send({
     from: env.RESEND_FROM_EMAIL,
     to,
-    subject: `CrossVal payment received — Order ${safeOrderNumber}`,
+    subject: `CrossVal payment received — ${safeCompanyName || safeCustomerName} · Order ${safeOrderNumber}`,
     html: `
       <div style="font-family: Arial, sans-serif; padding: 24px; color: #111827;">
         <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #dce6df;border-radius:16px;overflow:hidden;">

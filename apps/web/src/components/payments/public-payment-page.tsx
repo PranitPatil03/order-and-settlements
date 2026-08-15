@@ -129,6 +129,20 @@ export function PublicPaymentPage({ token }: { token: string }) {
             <span>Amount due</span>
             <span>{formatMoney(order.amountDueCents, order.currency)}</span>
           </div>
+          <div className="mt-5 space-y-2 border-t pt-4 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Subtotal</span>
+              <span>{formatMoney(order.subtotalCents, order.currency)}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Tax{order.taxRateBps ? ` (${(order.taxRateBps / 100).toFixed(2)}%)` : ''}</span>
+              <span>{formatMoney(order.taxCents, order.currency)}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2 font-semibold text-slate-950">
+              <span>Total</span>
+              <span>{formatMoney(order.totalCents, order.currency)}</span>
+            </div>
+          </div>
           <p className="mt-2 text-sm text-slate-500">
             Enter the amount in {order.currency} units. Stripe allows up to{' '}
             {formatMoney(maximumStripePaymentCents, order.currency)} per payment; larger balances

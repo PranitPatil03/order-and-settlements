@@ -41,6 +41,7 @@ const resolveOrderCustomer = async (
       customerId: null,
       customerName: input.customer ?? 'Customer',
       customerEmail: null,
+      companyName: null,
     };
   }
 
@@ -54,6 +55,7 @@ const resolveOrderCustomer = async (
     customerId: customer._id.toHexString(),
     customerName: customer.name,
     customerEmail: customer.email,
+    companyName: customer.companyName,
   };
 };
 
@@ -76,11 +78,16 @@ export const createOrderUseCase = async (userId: string, input: CreateOrderInput
         to: customer.customerEmail,
         orderNumber: order._id.toHexString(),
         amountDue: order.totalCents,
+        totalCents: order.totalCents,
         currency: order.currency,
         paymentUrl: paymentLink.url,
         customerName: customer.customerName,
+        companyName: customer.companyName,
         dueDate: order.dueDate,
         lineItems: order.lineItems,
+        subtotalCents: order.subtotalCents,
+        taxCents: order.taxCents,
+        taxRateBps: order.taxRateBps,
       });
     } catch (error) {
       logger.error(
@@ -150,6 +157,7 @@ export const updateOrderUseCase = async (
       ? { ...input, customerId: customer.customerId ?? undefined, customer: customer.customerName }
       : input,
     lineItems,
+    input.taxRateBps ?? currentOrder.taxRateBps,
   );
 
   if (!updatedOrder) {
