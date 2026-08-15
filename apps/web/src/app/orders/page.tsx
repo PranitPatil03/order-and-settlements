@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, CircleDollarSign, Download, LoaderCircle, Plus, Search } from 'lucide-react';
 
@@ -33,6 +34,14 @@ const statusLabels: Record<OrderStatus, string> = {
 };
 
 export default function OrdersPage() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <OrdersPageContent />
+    </Suspense>
+  );
+}
+
+function OrdersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceView = searchParams.get('view');
